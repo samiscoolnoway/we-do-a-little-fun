@@ -1,0 +1,42 @@
+# Repository-wide ignore rules: keep secrets, dependencies and generated output out of Git.
+# Project-specific rules stay in euv-simulator/.gitignore.
+
+# --- secrets and credentials: never commit these ---
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_dsa*
+id_ecdsa*
+id_ed25519*
+credentials.json
+secrets.json
+service-account*.json
+*.tfstate
+*.tfstate.*
+
+# --- dependencies and generated output (recreate with npm install / npm run build) ---
+node_modules/
+dist/
+coverage/
+.vite/
+.cache/
+*.log
+*.tsbuildinfo
+.eslintcache
+test-results/
+playwright-report/
+
+# --- operating system and editor files ---
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+*~
