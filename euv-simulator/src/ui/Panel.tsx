@@ -9,9 +9,12 @@ import { Seg, ZONE_COLOR, ZONE_NAME } from './controls';
 import { IconClose, IconExpand, IconFlask, IconTarget } from './icons';
 import { EquationCard, Rich } from './Rich';
 import { WidgetFor } from './widgets';
+import { ExplorerView } from './Explore';
+import { isInspectable } from '../data/hierarchy';
 
 const TABS: { id: PanelTab; label: string }[] = [
   { id: 'inspect', label: 'Inspect' },
+  { id: 'explore', label: 'Explore' },
   { id: 'concepts', label: 'Concepts' },
   { id: 'quiz', label: 'Quiz' },
   { id: 'about', label: 'About' },
@@ -55,6 +58,7 @@ export function Panel({ tall, onTall }: { tall: boolean; onTall: (v: boolean) =>
         {TABS.map((t) => (
           <div key={t.id} role="tabpanel" id={`pane-${t.id}`} aria-labelledby={`tab-${t.id}`} hidden={tab !== t.id}>
             {t.id === 'inspect' && <InspectView />}
+            {t.id === 'explore' && <ExplorerView />}
             {t.id === 'concepts' && <ConceptsView />}
             {t.id === 'quiz' && <QuizView />}
             {t.id === 'about' && <AboutView />}
@@ -160,6 +164,11 @@ function InspectView() {
         <span className="pill">{comp.span ? `Stages ${comp.span[0] + 1}–${comp.span[1] + 1}` : `Stage ${comp.stage + 1}`}</span>
       </div>
       <div className="insp-actions">
+        {isInspectable(comp.id) && (
+          <button type="button" className="btn btn-sm" onClick={() => sim.inspect(comp.id)} data-testid="btn-inspect3d">
+            Inspect in 3D
+          </button>
+        )}
         <button type="button" className="btn btn-sm" onClick={() => closeUp(comp.id)} data-testid="btn-closeup">
           <IconTarget size={14} /> Close-up
         </button>

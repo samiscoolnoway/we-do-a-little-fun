@@ -17,6 +17,7 @@ export function Dock() {
   const tone = useSim((s) => s.tone);
   const dose = useSim((s) => s.dose);
   const atm = useSim((s) => s.atmosphere);
+  const casing = useSim((s) => s.casing);
   const [more, setMore] = useState(false);
 
   const range = useRef<HTMLInputElement>(null);
@@ -115,6 +116,19 @@ export function Dock() {
       </div>
 
       <div className={`dock-opts${more ? '' : ' closed'}`}>
+        <div className="grp" role="group" aria-label="Machine casing">
+          <span className="glabel">Machine</span>
+          <Seg
+            label="Machine casing"
+            value={casing}
+            onChange={(v) => (v === 'closed' ? sim.closeCasing() : sim.openCasing())}
+            options={[
+              { value: 'closed', label: 'Exterior', title: 'Close the casing and show the outside of the machine (O)' },
+              { value: 'open', label: 'Interior', title: 'Open the casing and show the parts inside (O)' },
+            ]}
+            testId="seg-casing"
+          />
+        </div>
         <div className="grp keep" role="group" aria-label="View">
           <span className="glabel">View</span>
           <Seg

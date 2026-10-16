@@ -286,6 +286,9 @@ export class SourceModule implements SimModule {
     pulsesGroup.add(beamProxy);
     this.mainCone = beamFrustum(SRC.hole, F1, 0.36, 0.02, COLOR.laser, 0, 18);
     this.preCone = beamFrustum(SRC.hole, SRC.prePt, 0.24, 0.02, COLOR.laser, 0, 18);
+    // the drive-laser cones are light too, but not EUV: they stay out of the isolated EUV-beam view
+    this.mainCone.userData.beam = 'laser';
+    this.preCone.userData.beam = 'laser';
     pulsesGroup.add(this.mainCone, this.preCone);
     this.mainCone.userData.nopick = true;
     this.preCone.userData.nopick = true;
@@ -532,10 +535,14 @@ export class SourceModule implements SimModule {
         }
       }
     }
-    (this.mainCone.material as THREE.MeshBasicMaterial).opacity = showPath ? flashMain * 0.55 : 0;
-    (this.preCone.material as THREE.MeshBasicMaterial).opacity = showPath ? flashPre * 0.5 : 0;
-    this.mainCone.visible = showPath && flashMain > 0.01;
-    this.preCone.visible = showPath && flashPre > 0.01;
+    // inspected on its own, the pulse pair is held at a steady glow so it can be looked at while paused
+    const held = c.inspect === 'laserPulses';
+    const fMain = held ? 0.75 + 0.1 * Math.sin(T * 2.4) : showPath ? flashMain : 0;
+    const fPre = held ? 0.6 : showPath ? flashPre : 0;
+    (this.mainCone.material as THREE.MeshBasicMaterial).opacity = fMain * 0.55;
+    (this.preCone.material as THREE.MeshBasicMaterial).opacity = fPre * 0.5;
+    this.mainCone.visible = fMain > 0.01;
+    this.preCone.visible = fPre > 0.01;
 
     // ── plasma ──
     {

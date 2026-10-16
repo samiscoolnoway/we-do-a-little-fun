@@ -50,9 +50,13 @@ export class WorldModule implements SimModule {
     this.downFace = b.face;
   }
 
+  private first = true;
+
   update(c: FrameCtx) {
     const inScanner = STAGES[c.stage].inScanner;
-    const k = 0.1;
+    // frame-rate independent easing; the first frame starts at the target so the closed machine never flashes the frames
+    const k = this.first ? 1 : 1 - Math.exp(-c.dt * 6);
+    this.first = false;
     // the zone frames explain the interior; on the closed machine they would just look like bounding boxes
     const show = c.casingOpen ? 1 : 0;
     const se = this.scannerEdges.material as THREE.LineBasicMaterial;

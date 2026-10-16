@@ -4,12 +4,16 @@ import { STAGES } from '../data/stages';
 import { sim, useSim } from '../store/sim';
 import { ZONE_COLOR } from './controls';
 import { IconChevron, IconFlask, IconPanel, Logo } from './icons';
+import { InspectToolbar } from './Explore';
 
 export function TopBar() {
   const stage = useSim((s) => s.stage);
   const deep = useSim((s) => s.deep);
   const open = useSim((s) => s.panelOpen);
+  const closed = useSim((s) => s.casing === 'closed');
+  const inspect = useSim((s) => s.inspect);
   const st = STAGES[stage];
+  const badge = inspect ? 'Isolated inspection' : closed ? 'Machine exterior' : st.inScanner ? 'Inside the EUV scanner' : st.zone === 'etch' ? 'Outside the scanner · etch tool' : 'Outside the scanner · track';
   return (
     <header className="topbar" data-testid="topbar">
       <div className="brand">
@@ -21,7 +25,7 @@ export function TopBar() {
       </div>
       <span className={`zone-badge${st.inScanner ? '' : ' out'}`} style={{ ['--zc' as string]: ZONE_COLOR[st.zone] }} data-testid="zone-badge">
         <i />
-        {st.inScanner ? 'Inside the EUV scanner' : st.zone === 'etch' ? 'Outside the scanner · etch tool' : 'Outside the scanner · track'}
+        {badge}
       </span>
       <div className="top-spacer" />
       <button type="button" className="btn btn-deep" aria-pressed={deep} aria-label="Deep Science" onClick={() => sim.toggleDeep()} title="Reveal advanced explanations (D)" data-testid="btn-deep">
@@ -114,9 +118,11 @@ const KEY_ITEMS: [string, string][] = [
 ];
 
 export function ViewportFoot() {
+  const inspect = useSim((s) => s.inspect);
   return (
     <div className="viewport-foot">
-      <div className="keys" aria-label="Colour key">
+      <InspectToolbar />
+      <div className="keys" aria-label="Colour key" hidden={!!inspect}>
         {KEY_ITEMS.map(([c, n]) => (
           <span className="key" key={n} style={{ ['--k' as string]: c }}>
             <i />
@@ -133,6 +139,7 @@ export function ViewportFoot() {
 
 export function Hint() {
   const visible = useSim((s) => s.hintVisible);
+  const closed = useSim((s) => s.casing === 'closed');
   useEffect(() => {
     const t = window.setTimeout(() => sim.dismissHint(), 14000);
     return () => window.clearTimeout(t);
@@ -140,8 +147,8 @@ export function Hint() {
   if (!visible) return null;
   return (
     <div className="hint" role="note" data-testid="hint">
-      <span className="hint-long">Drag to orbit · scroll to zoom · click any part or floating label to inspect it</span>
-      <span className="hint-short">Drag to orbit · pinch to zoom · tap to inspect</span>
+      <span className="hint-long">{closed ? 'Click a cabinet to explore what is inside · drag to orbit · scroll to zoom' : 'Drag to orbit · scroll to zoom · click any part or floating label to inspect it'}</span>
+      <span className="hint-short">{closed ? 'Tap a cabinet to explore it · drag to orbit' : 'Drag to orbit · pinch to zoom · tap to inspect'}</span>
     </div>
   );
 }

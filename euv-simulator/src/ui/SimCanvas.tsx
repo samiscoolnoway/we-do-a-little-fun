@@ -6,10 +6,11 @@ import { LABELS } from '../data/labels';
 import { QUIZ } from '../data/quiz';
 import { STAGES, STAGE_START, T_TOTAL } from '../data/stages';
 import { sim } from '../store/sim';
+import { ORPHANS, SUBSYSTEMS, inspectInfo, isInspectable, isolationTargets } from '../data/hierarchy';
 
 declare global {
   interface Window {
-    __euv?: { sim: typeof sim; scene: SceneController | null; starts: number[]; durations: number[]; total: number; data: unknown };
+    __euv?: { sim: typeof sim; scene: SceneController | null; starts: number[]; durations: number[]; total: number; data: unknown; explore: unknown };
   }
 }
 
@@ -80,6 +81,8 @@ export function SimCanvas() {
       total: T_TOTAL,
       // read-only copies of the content tables, used by the automated tests
       data: { STAGES, COMPONENT_LIST, LABELS: LABELS.map((l) => ({ id: l.id, comp: l.comp, kind: l.kind })), CONCEPTS: CONCEPTS.map((c) => c.id), QUIZ },
+      // the component hierarchy, used by the tests of the exploration mode
+      explore: { SUBSYSTEMS, ORPHANS, inspectInfo, isInspectable, isolationTargets },
     };
     window.__euv = { sim, scene: ctl, ...meta };
     window.dispatchEvent(new Event('euv-ready'));

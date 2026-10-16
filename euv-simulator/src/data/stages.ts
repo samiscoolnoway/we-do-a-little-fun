@@ -2,6 +2,8 @@ import type { CamPreset, StageDef, Zone } from './types';
 import { N_IDX, S_AT, S_TOTAL } from './layout';
 
 export const OVERVIEW: CamPreset = { t: [6.5, -2.4, 0], az: -8, el: 9, fit: [62, 43] };
+/** the closed machine, seen a little from the side so the depth of the cabinets reads */
+export const EXTERIOR: CamPreset = { t: [6, -1.2, 0.5], az: -16, el: 11, fit: [62, 46] };
 
 export const STAGES: StageDef[] = [
   {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { sim, useSim } from './store/sim';
 import { Announcer, Fallback, Hint, StageCard, TopBar, ViewportFoot } from './ui/Chrome';
+import { ExteriorCard, InspectCard, IsoVeil } from './ui/Explore';
 import { Dock } from './ui/Dock';
 import { Panel } from './ui/Panel';
 import { SimCanvas } from './ui/SimCanvas';
@@ -47,8 +48,13 @@ function useShortcuts() {
         case 'R':
           sim.restart();
           break;
+        case 'o':
+        case 'O':
+          sim.toggleCasing();
+          break;
         case 'Escape':
-          if (sim.state.selectedId) sim.select(null);
+          if (sim.state.inspect) sim.exitInspect();
+          else if (sim.state.selectedId) sim.select(null);
           else sim.togglePanel(false);
           break;
         default:
@@ -61,15 +67,18 @@ function useShortcuts() {
 
 export function App() {
   const webgl = useSim((s) => s.webgl);
+  const inspecting = useSim((s) => !!s.inspect);
+  const closed = useSim((s) => s.casing === 'closed');
   const [tall, setTall] = useState(false);
   useShortcuts();
   return (
     <div className="app">
       <TopBar />
       <div className="main">
-        <div className="viewport" data-testid="viewport">
+        <div className={`viewport${inspecting ? ' is-inspecting' : ''}`} data-testid="viewport" data-casing={closed ? 'closed' : 'open'}>
           <SimCanvas />
-          <StageCard />
+          <IsoVeil />
+          {inspecting ? <InspectCard /> : closed ? <ExteriorCard /> : <StageCard />}
           <ViewportFoot />
           <Hint />
           {webgl === 'failed' && <Fallback />}

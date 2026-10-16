@@ -305,6 +305,8 @@ class SlabInstance {
     this.plasma.position.y = Y_TOP + 0.85;
     this.plasma.raycast = () => {};
     g.add(this.liquid, this.plasma);
+    // photons inside the magnified resist belong to the cross-section, not to the isolated EUV-beam view
+    this.photons.mesh.userData.beam = 'photons';
     for (const p of [this.photons.mesh, this.flash.pts, this.electrons.pts, this.acid.pts, this.marks.pts, this.frags.pts, this.ions.pts, this.spark.pts, this.byp.pts]) g.add(p);
     // random-walk paths of every acid molecule during the bake
     for (let i = 0; i < N_ACID; i++) {

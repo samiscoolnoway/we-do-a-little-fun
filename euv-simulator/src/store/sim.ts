@@ -1,7 +1,9 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import type { Atmosphere, CasingState, InspectPreset, Level, PanelTab, ToneMode, ViewMode } from '../data/types';
 import { isInspectable, isSubsystem } from '../data/hierarchy';
-import { N_STAGES, STAGE_START, T_TOTAL, stageAt, stageProgress } from '../data/stages';
+import { N_STAGES, STAGES, STAGE_START, T_TOTAL, stageAt, stageProgress } from '../data/stages';
+
+const STAGE_DURATION = STAGES.map((s) => s.duration);
 
 export interface SimState {
   playing: boolean;
@@ -66,6 +68,18 @@ const initial: SimState = {
 };
 
 let state: SimState = initial;
+/**
+ * Items that only exist at certain moments of the timeline: inspecting one outside that range moves the
+ * (paused) timeline to where it can be seen. [first, last] stage index.
+ */
+const SHOW_AT: Record<string, [number, number, number]> = {
+  // [first stage, last stage, how far into the first stage to go]
+  resist: [7, 10, 0.6], // the magnified cross-section exists (fully grown) from mid-exposure on
+  euvBeam: [7, 7, 0.4], // the whole light path, source to wafer, is lit during the exposure
+  droplets: [0, 3, 0.4],
+  laserPulses: [1, 3, 0.4],
+  plasma: [2, 3, 0.4],
+};
 /** where to go back to when inspection ends */
 let inspectReturn: { view: ViewMode; focusId: string | null; casing: CasingState } | null = null;
 let time = 0;
@@ -224,6 +238,11 @@ export const sim = {
       return;
     }
     if (!state.inspect) inspectReturn = { view: state.view, focusId: state.focusId, casing: state.casing };
+    const range = SHOW_AT[id];
+    if (range && (state.stage < range[0] || state.stage > range[1])) {
+      sim.setTime(STAGE_START[range[0]] + range[2] * STAGE_DURATION[range[0]]);
+      set({ playing: false });
+    }
     set({
       inspect: id,
       selectedId: isSubsystem(id) ? null : id,

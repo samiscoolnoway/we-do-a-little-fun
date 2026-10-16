@@ -62,9 +62,10 @@ export class SupportModule implements SimModule {
     this.group.add(frame, vac, cool, cab);
     // framing leaves out the long pedestal legs so the isolators and metrology frame stay large on screen
     reg.register('frame', frame, { priority: 0.6, bounds: () => new THREE.Box3(v(PLINTH.x0, PLINTH.y0, -PLINTH.zd), v(PLINTH.x1, 2.4, PLINTH.zd)) });
-    reg.register('vacuumPumps', vac, { priority: 1.2 });
-    reg.register('cooling', cool, { priority: 1.1 });
-    reg.register('cabling', cab, { priority: 1.1 });
+    // below the optics and stages (priority 1): a pipe or cable passing in front of a mirror never steals its click
+    reg.register('vacuumPumps', vac, { priority: 0.8 });
+    reg.register('cooling', cool, { priority: 0.7 });
+    reg.register('cabling', cab, { priority: 0.7 });
   }
 
   // ── structural frame, pedestals, isolators, metrology frame, columns ──

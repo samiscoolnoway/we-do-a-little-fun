@@ -474,7 +474,8 @@ export class CasingModule implements SimModule {
     // full open/close in about 1.6 s, independent of frame rate
     const step = c.dt / 1.6;
     this.k = clamp(this.k + Math.sign(target - this.k) * step, 0, 1);
-    if (Math.abs(target - this.k) < step) this.k = target;
+    if (Math.abs(target - this.k) < step || this.snapNext) this.k = target;
+    this.snapNext = false;
     const k = this.k;
     this.group.visible = k < 0.999;
     if (!this.group.visible) return;
@@ -505,6 +506,9 @@ export class CasingModule implements SimModule {
     }
     for (const m of this.mats) m.opacity = (m.userData.baseOpacity ?? 1) * fade;
   }
+
+  /** finish a running open/close on the next frame (tests settle the scene this way) */
+  snapNext = false;
 
   /** 0 = closed, 1 = open (for tests and the controller). */
   get openness() {

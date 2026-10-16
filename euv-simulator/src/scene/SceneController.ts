@@ -4,7 +4,7 @@ import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment
 import { COMPONENTS } from '../data/components';
 import { LabelDef } from '../data/labels';
 import { SLAB, v3 } from '../data/layout';
-import { OVERVIEW, STAGES, stageProgress } from '../data/stages';
+import { EXTERIOR, OVERVIEW, STAGES, stageProgress } from '../data/stages';
 import type { CamPreset, InspectPreset } from '../data/types';
 import { framingTargets, isSubsystem, isolationTargets } from '../data/hierarchy';
 import { CABINET_BY_ID, CasingModule } from './casing';
@@ -146,12 +146,21 @@ export class SceneController {
     this.controls.maxAzimuthAngle = 1.25;
     this.controls.screenSpacePanning = true;
     this.controls.zoomSpeed = 0.9;
+    // the user has taken the camera only once it really moves during a drag, wheel or pinch (a plain click on a
+    // part also fires 'start', and must not count: Back would otherwise return to a stale pose)
+    let interacting = false;
     this.controls.addEventListener('start', () => {
       this.tween = null;
-      this.userMoved = true;
+      interacting = true;
       sim.dismissHint();
     });
-    this.controls.addEventListener('change', () => this.markDirty());
+    this.controls.addEventListener('end', () => {
+      interacting = false;
+    });
+    this.controls.addEventListener('change', () => {
+      if (interacting) this.userMoved = true;
+      this.markDirty();
+    });
 
     this.labels = new LabelLayer(
       host,
@@ -170,7 +179,19 @@ export class SceneController {
     this.ro.observe(host);
     this.resize();
 
-    this.unsub.push(sim.subscribe(() => this.markDirty()));
+    let cards = '';
+    this.unsub.push(
+      sim.subscribe(() => {
+        // the overlay cards change with these: measure them again on the next frame instead of waiting for the poll
+        const s = sim.state;
+        const k = `${s.inspect}|${s.casing}|${s.panelOpen}`;
+        if (k !== cards) {
+          cards = k;
+          this.obstacleT = 0;
+        }
+        this.markDirty();
+      }),
+    );
     this.unsub.push(sim.subscribeTime(() => this.markDirty()));
     this.snapToPreset(true);
     this.warmUp();
@@ -264,6 +285,7 @@ export class SceneController {
       return { key: `C:${s.focusId}:${s.viewNonce}`, preset };
     }
     if (s.view === 'stage') return { key: `S:${s.stage}:${s.viewNonce}`, preset: STAGES[s.stage].cam };
+    if (s.casing === 'closed') return { key: `X:${s.viewNonce}`, preset: EXTERIOR };
     return { key: `M:${s.viewNonce}`, preset: OVERVIEW };
   }
 
@@ -280,19 +302,11 @@ export class SceneController {
     }
     if (box.isEmpty()) box.setFromCenterAndSize(this.controls.target.clone(), new THREE.Vector3(4, 4, 4));
     const c = box.getCenter(new THREE.Vector3());
+    // the cross-section moves with the wafer: aim where it will be at the current time, not where it was last drawn
+    if (id === 'resist') c.set(this.slabCenterX(), SLAB.y + 1.3, 0);
     const comp = COMPONENTS[id];
     // a process (plasma, droplets, light) is framed with some of its surroundings in view
-    let r = Math.max(comp?.kind === 'process' ? 2.6 : 0.8, box.getSize(new THREE.Vector3()).length() / 2);
-    // the hardware shown around a process stays in frame too, while the process itself stays centred
-    if (comp?.kind === 'process')
-      for (const t of comp.context ?? []) {
-        const b = this.registry.box(t, tmp);
-        if (!b || b.isEmpty()) continue;
-        for (let k = 0; k < 8; k++) {
-          const p = new THREE.Vector3(k & 1 ? b.max.x : b.min.x, k & 2 ? b.max.y : b.min.y, k & 4 ? b.max.z : b.min.z);
-          r = Math.max(r, 0.9 * p.distanceTo(c));
-        }
-      }
+    const r = Math.max(comp?.kind === 'process' ? 2.6 : 0.8, box.getSize(new THREE.Vector3()).length() / 2);
     let az = comp?.cam.az ?? -24;
     let el = comp?.cam.el ?? 16;
     if (which !== 'default') [az, el] = PRESET_DIR[which];
@@ -319,9 +333,10 @@ export class SceneController {
     }
     const ids = id === 'enclosure' ? ['enclosure'] : isolationTargets(id);
     // the EUV light is drawn by beam segments spread over several modules; they are marked userData.beam
+    // (true for EUV, 'laser' for the drive-laser cones)
     if (ids.includes('euvBeam'))
       this.scene.traverse((o) => {
-        if (o.userData.beam) {
+        if (o.userData.beam === true) {
           o.traverse((x) => x.layers.enable(ISO));
           this.isoObjs.push(o);
         }
@@ -381,9 +396,19 @@ export class SceneController {
     this.userMoved = false;
   }
 
+  /** Drop the damped rotate/zoom/pan momentum OrbitControls keeps between updates (e.g. from the auto-rotation),
+   *  so a glide lands exactly on its pose instead of drifting on afterwards. */
+  private stopMomentum() {
+    const c = this.controls as unknown as { _sphericalDelta?: THREE.Spherical; _panOffset?: THREE.Vector3; _scale?: number };
+    c._sphericalDelta?.set(0, 0, 0);
+    c._panOffset?.set(0, 0, 0);
+    if (c._scale !== undefined) c._scale = 1;
+  }
+
   private stepTween(now: number) {
     const tw = this.tween;
     if (!tw) return;
+    this.stopMomentum();
     const k = easeInOut(clamp((now - tw.t0) / tw.dur));
     const target = tw.fromTarget.clone().lerp(tw.to.target, k);
     // interpolate the offset in spherical coordinates for a smooth arc
@@ -515,6 +540,8 @@ export class SceneController {
   debugSettle() {
     // ResizeObserver callbacks are only delivered in rendering steps, which are ~1 s apart on a software renderer
     if (this.host.clientWidth !== this.width || this.host.clientHeight !== this.height) this.resize();
+    this.casing.snapNext = true;
+    this.obstacleT = 0; // re-measure the overlay cards now
     this.debugFrame(); // notices a changed preset and starts the glide
     if (this.tween) this.tween.t0 = performance.now() - this.tween.dur - 1;
     this.debugFrame(); // lands the camera
@@ -613,10 +640,13 @@ export class SceneController {
       this.applyIsolation(st.inspect);
       this.setInspectControls(!!st.inspect);
       if (leaving && this.returnPose) {
-        // Back: glide to exactly where the camera was before inspection started
+        // Back: glide to exactly where the user had put the camera before inspection started; if they had not
+        // moved it, to the current view's preset (the same place, unless the stage changed in the meantime)
         const rp = this.returnPose;
-        this.presetKey = this.currentPreset().key;
-        this.tween = { t0: performance.now(), dur: 1300, fromPos: this.camera.position.clone(), fromTarget: this.controls.target.clone(), to: { pos: rp.pos, target: rp.target } };
+        const cur = this.currentPreset();
+        this.presetKey = cur.key;
+        const to = rp.userMoved ? { pos: rp.pos, target: rp.target } : poseFor(cur.preset, this.width, this.height, this.insets);
+        this.tween = { t0: performance.now(), dur: 1300, fromPos: this.camera.position.clone(), fromTarget: this.controls.target.clone(), to };
         this.userMoved = rp.userMoved;
         this.returnPose = null;
         this.markDirty(2200);

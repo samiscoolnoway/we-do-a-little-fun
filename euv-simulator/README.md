@@ -13,7 +13,30 @@ React 19 + Three.js (plain, no react-three-fiber) + TypeScript + Vite.
 
 ## What it shows
 
-Eleven stages on one timeline (125 s at 1× speed). The first eight happen **inside the scanner**
+**The machine first.** The app opens on the closed machine: a stylised exterior with cabinets for the drive
+laser, the EUV source, the illuminator, the reticle (mask) stage, the projection optics and the wafer stage,
+plus the separate track and etch tools. Doors, panel seams, fasteners, vents, utility hoses, a base frame,
+windows, identification plates and warning markings are modelled to read as industrial equipment. **This is not
+ASML CAD data**: the layout is an educational arrangement built from public descriptions, not to scale.
+Opening the machine (button, the *Machine: Exterior / Interior* control, `O`, or pressing Play) slides and
+fades the panels away to reveal the interior: the source, the illumination and projection optics, the reticle
+and wafer stages, and the supporting systems (metrology frame with vibration isolation, vacuum pumps, cooling
+circuits, cabling and sensors).
+
+**Exploring a part.** Hover any cabinet or part to highlight it and click it (or its label, or an entry of
+the *Explore* tab) to open the **isolated inspection view**: everything else is hidden, the camera glides to the
+part, frames it so it never leaves the screen, and turns it slowly (one turn per minute). Assemblies such as
+*EUV light source* are inspected whole and list their parts, each of which can be isolated in turn.
+Processes (droplets, laser pulses, plasma, EUV light) are shown with the hardware around them. The card shows
+the name at once, the breadcrumb (*Machine › subsystem › part*) and the category, then **types** the
+explanation in three levels, *Overview → Engineering → Deep science*, one after the other, with a progress bar,
+Pause / Resume text, Skip, and level tabs. With *reduced motion* the text appears complete at once.
+Switching to another part cancels the old text. The toolbar has Back (to exactly where you were),
+Pause / Resume rotation, Reverse, Reset view, Front / Side / Top / Iso, Full notes (the science panel) and
+Machine exterior. Dragging rotates the part and pauses the automatic rotation until Resume is pressed;
+scroll or pinch zooms; right-drag or a two-finger drag pans.
+
+**The process.** Eleven stages on one timeline (125 s at 1× speed). The first eight happen **inside the scanner**
 (cyan frame, vacuum); the last three happen in **separate machines** (amber frame) and are labelled that way
 in the scene, the top bar and the stage cards.
 
@@ -40,7 +63,10 @@ deprotection with diffusion; development: solubility switch) instead of writing 
 
 | Control | Effect |
 |---|---|
-| Play / pause, restart | run the timeline; paused frames can be inspected and orbited |
+| Play / pause, restart | run the timeline (starts paused on the exterior; playing opens the machine) |
+| Machine: Exterior / Interior | close or open the casing, animated (`O`) |
+| Click a cabinet, a part or a label | isolated inspection view of that item (see above) |
+| Explore tab | the machine as a tree: every subsystem and part, each one opens the isolated view |
 | Previous / next stage, stage chips | jump to the start of any of the 11 stages |
 | Timeline scrubber | drag or click anywhere; the scene is a pure function of the timeline time, so scrubbing never pops |
 | Speed | 0.25×, 0.5×, 1×, 2×, 4× |
@@ -50,11 +76,11 @@ deprotection with diffusion; development: solubility switch) instead of writing 
 | Chamber: Vacuum / Air | shows why EUV needs vacuum: in air the beam dies within a short, exaggerated distance |
 | Resist: Positive / Negative / Compare | changes the resist tone; compare shows both side by side with the same exposure |
 | Dose | exposure dose; under-exposure and over-exposure change the printed profile |
-| Click a part or a label | opens the component panel: a one-line *In plain words* summary, then What it is, What it does, Physics, Chemistry, Equation, What you see, and a *Real science vs. this model* section (established science / simplified here / not shown). Small interactive labs appear where they help: photon energy, diffraction and resolution, resist response, multilayer interference, mask pattern, Beer–Lambert absorption, and a pattern-transfer chart that follows one line pattern from the mask through light, acid, bake, development and etch |
+| Full notes / Inspect tab | the component panel: a one-line *In plain words* summary, then What it is, What it does, Physics, Chemistry, Equation, What you see, and a *Real science vs. this model* section (established science / simplified here / not shown). Small interactive labs appear where they help: photon energy, diffraction and resolution, resist response, multilayer interference, mask pattern, Beer–Lambert absorption, and a pattern-transfer chart that follows one line pattern from the mask through light, acid, bake, development and etch |
 | Deep Science | adds advanced notes, limits of the model and extra equations to every panel |
 | Concepts tab | the 12 teaching concepts at Beginner / Intermediate / Advanced, each with a jump to the stage that shows it |
 | Quiz tab | 15 questions with explanations |
-| Keyboard | `Space` play/pause · `←` `→` stage · `L` labels · `P` optical path · `M` view · `D` deep science · `R` restart · `Esc` close |
+| Keyboard | `Space` play/pause · `←` `→` stage · `L` labels · `P` optical path · `M` view · `O` open/close casing · `D` deep science · `R` restart · `Esc` leave inspection / close |
 
 ## Run it
 
@@ -89,9 +115,19 @@ and the quiz still work and the page says so.
 * **Labels** are DOM elements anchored to 3-D points with leader lines, collision avoidance, a compact
   overview mode and click-through to the component panel (`src/scene/labels.ts`).
 * **State** is one small store (`src/store/sim.ts`) read through `useSyncExternalStore`; the panels,
-  dock, stage card and the 3-D scene all follow it.
-* Content lives in plain data files: `src/data/components.ts` (21 inspectable components with equations,
-  variables and units), `concepts.ts` (12 concepts × 3 levels), `quiz.ts`, `stages.ts`, `labels.ts`.
+  dock, stage card, the inspection card and the 3-D scene all follow it (casing, inspected id, rotation,
+  camera preset all live there).
+* **One identity per part.** `src/data/hierarchy.ts` groups the components (`src/data/components.ts`) into
+  seven subsystems; the registry (`src/scene/registry.ts`) maps each id to its scene objects, picking
+  priority, bounds and isolation roots. The machine view, the explorer, the card and the isolation all resolve
+  ids through these two files.
+* **Isolation uses render layers**, not copies: the inspected objects are switched onto a second layer and
+  the camera draws only that layer, so nothing is duplicated and the rest of the scene keeps its state.
+  The casing (`src/scene/casing.ts`) and support systems (`src/scene/support.ts`) share merged geometry and
+  a handful of materials; casing materials become transparent only while the panels move.
+* Content lives in plain data files: `src/data/components.ts` (29 components with engineering notes,
+  equations, variables and units), `hierarchy.ts` (subsystems and their three explanation levels),
+  `concepts.ts` (12 concepts × 3 levels), `quiz.ts`, `stages.ts`, `labels.ts`.
 * Chart colours in the resist widgets were checked with a palette validator for the dark panel surface
   (lightness band, colour-vision-deficiency separation and contrast).
 
@@ -106,6 +142,14 @@ concepts at three levels, the quiz, the Deep Science toggle, positive/negative/c
 changing the 3-D profile, air vs vacuum, determinism after jumps, keyboard shortcuts, a phone-sized layout
 (no horizontal scroll, bottom sheet, tapping labels) and the no-WebGL fallback.
 
+The exploration mode is covered too: the closed exterior at start (cabinet labels only, only cabinets
+pickable, hover highlight, cabinet click), the animated open/close, isolation of **every** subsystem and part
+(drawn set equals the expected set, framed inside the view, no labels), the hierarchy (no orphans, every item
+has its own three explanation levels), dragging pausing the rotation, Resume, Reverse, the four presets, Reset,
+Back restoring the camera, assembly children, breadcrumbs, the explorer tab, Machine exterior, and the
+typewriter (name first, growing prefix, pause, resume, skip, level tabs without mixing, switching cancels,
+automatic advance, independence from the rotation, reduced motion).
+
 Limits you should know about:
 
 * The checks ran on **software-rendered WebGL** (SwiftShader, about 1–2 frames per second), so frame rate on
@@ -119,9 +163,9 @@ Limits you should know about:
 
 ```
 src/data/      stages, components (info panels), concepts, quiz, labels, geometry constants
-src/scene/     Three.js scene: source, optics, wafer, resist slab, tracks/etch, labels, picking
+src/scene/     Three.js scene: casing, support systems, source, optics, wafer, resist slab, tracks/etch, labels, picking
 src/store/     the simulation store (time, stage, view, tone, dose, selection, panel)
-src/ui/        React UI: top bar, stage card, dock/timeline, panel (inspect / concepts / quiz / about), widgets
+src/ui/        React UI: top bar, stage card, exterior + inspection cards (Explore.tsx), dock/timeline, panel, widgets
 scripts/       make-standalone.mjs (single-file build)
 tests/         end-to-end tests and screenshot helpers (Playwright)
 ```

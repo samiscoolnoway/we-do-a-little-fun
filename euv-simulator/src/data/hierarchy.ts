@@ -26,7 +26,7 @@ export const SUBSYSTEMS: SubsystemDef[] = [
       'A droplet generator above and a catcher below, the drive laser entering through the centre of the collector, the collector mirror around the plasma, and a vacuum vessel with hydrogen flows, cooling and debris protection. The module ends at the intermediate focus, where the light is handed to the scanner.',
     deep:
       'A CO₂-laser pre-pulse reshapes each tin droplet and the main pulse heats it to electron temperatures of tens of eV. Sn⁸⁺ to Sn¹⁴⁺ ions then emit a dense band of lines near 13.5 nm. An ellipsoidal Mo/Si-coated collector images the plasma onto the intermediate focus. Only a few percent of the laser energy becomes useful in-band EUV; the rest is heat, fast ions and debris that the vessel has to handle.',
-    children: ['dropletGenerator', 'droplets', 'co2Laser', 'laserPulses', 'plasma', 'collector', 'catcher', 'vacuum', 'intermediateFocus'],
+    children: ['dropletGenerator', 'droplets', 'co2Laser', 'laserPulses', 'plasma', 'collector', 'catcher', 'vacuum', 'intermediateFocus', 'euvBeam'],
   },
   {
     id: 'sys-illum',
@@ -104,9 +104,9 @@ export function isolationTargets(id: string): string[] {
   return c.kind === 'process' ? [id, ...(c.context ?? [])] : [id];
 }
 
-/** Registry ids the camera frames: the item itself (a process is framed on its own extent, not its context). */
+/** Registry ids the camera frames: the item itself, an assembly's parts, or a process together with the hardware drawn around it. */
 export function framingTargets(id: string): string[] {
-  return isSubsystem(id) ? isolationTargets(id) : [id];
+  return isSubsystem(id) || COMPONENTS[id]?.kind === 'process' ? isolationTargets(id) : [id];
 }
 
 export interface InspectInfo {
