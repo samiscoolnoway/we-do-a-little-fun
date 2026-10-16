@@ -551,8 +551,14 @@ await test('inspector shows the six required sections for every component (with 
         heads: [...(root?.querySelectorAll('h3') || [])].map((h) => h.textContent.trim()),
         eq: root?.querySelectorAll('.eq').length,
         paras: [...(root?.querySelectorAll('section p') || [])].map((p) => p.textContent.trim().length),
+        plain: root?.querySelector('[data-testid=plain-words]')?.textContent.trim().length || 0,
+        acc: [...(root?.querySelectorAll('[data-testid=accuracy] dt') || [])].map((d) => d.textContent.trim()),
+        limits: root?.querySelectorAll('[data-testid=accuracy] li').length || 0,
       };
     });
+    if (r.plain < 40) problems.push(`${c.id}: plain-language summary missing`);
+    if (JSON.stringify(r.acc) !== JSON.stringify(['Established science', 'Simplified in this model', 'Not shown'])) problems.push(`${c.id}: accuracy section ${r.acc.join(' | ')}`);
+    if (r.limits < 1) problems.push(`${c.id}: no simplifications listed`);
     const need = ['What it is', 'What it does', 'Physics', 'Chemistry', 'Equation', 'What you see'];
     if (r.title !== c.name) problems.push(`${c.id}: title "${r.title}"`);
     if (JSON.stringify(r.heads.slice(0, 6)) !== JSON.stringify(need)) problems.push(`${c.id}: headings ${r.heads.slice(0, 6).join(' | ')}`);
@@ -588,6 +594,49 @@ await test('component widgets render: photon lab, diffraction lab, resist chart,
   assert((await verdict()).includes('Image forms'), 'NA 0.60 at 12 nm half-pitch should image');
 });
 
+await test('pattern-transfer lab follows the Resist and Dose controls (positive and negative are complementary)', async () => {
+  await S(() => {
+    const { sim } = window.__euv;
+    sim.setDose(1);
+    sim.setTone('compare');
+    sim.select('etcher');
+  });
+  await sleep(250);
+  // film rects of the etch rows: height 6, coloured as the etched film; one row per tone
+  const film = () =>
+    S(() => {
+      const svg = document.querySelector('[data-testid=inspector] [data-testid=transfer-lab]');
+      if (!svg) return null;
+      return [...svg.querySelectorAll('rect')].filter((r) => r.getAttribute('height') === '6' && r.getAttribute('fill') === 'var(--c-etch)').length;
+    });
+  const both = await film();
+  assert(both !== null, 'pattern transfer lab missing in the etch inspector');
+  assert(Math.abs(both - 108) <= 2, `compare: positive + negative film should cover the 108 columns once, got ${both}`);
+  await S(() => window.__euv.sim.setTone('positive'));
+  await sleep(150);
+  const pos1 = await film();
+  await S(() => window.__euv.sim.setTone('negative'));
+  await sleep(150);
+  const neg1 = await film();
+  assert(Math.abs(pos1 + neg1 - 108) <= 2 && pos1 > 10 && neg1 > 10, `tones should be complementary: ${pos1} + ${neg1}`);
+  await S(() => {
+    window.__euv.sim.setTone('positive');
+    window.__euv.sim.setDose(1.5);
+  });
+  await sleep(150);
+  const posHigh = await film();
+  assert(posHigh < pos1, `higher dose should leave narrower positive-tone lines (${posHigh} vs ${pos1} columns)`);
+  for (const id of ['reticle', 'resist', 'bakePlate', 'developer']) {
+    await S((id) => window.__euv.sim.select(id), id);
+    await sleep(120);
+    assert(await S(() => !!document.querySelector('[data-testid=inspector] [data-testid=transfer-lab]')), `${id}: pattern transfer lab missing`);
+  }
+  await S(() => {
+    window.__euv.sim.setDose(1);
+    window.__euv.sim.setTone('positive');
+  });
+});
+
 await test('Deep Science reveals advanced notes and limits, and switches the concepts to the Advanced level', async () => {
   await S(() => {
     window.__euv.sim.select('plasma');
@@ -595,6 +644,8 @@ await test('Deep Science reveals advanced notes and limits, and switches the con
   });
   await sleep(200);
   assert((await S(() => !!document.querySelector('[data-testid=deep-content]'))) === false, 'deep content should be hidden at first');
+  // the simplifications of the model are listed even without Deep Science
+  assert((await S(() => document.querySelectorAll('[data-testid=accuracy] li').length)) > 0, 'model limits should be visible without Deep Science');
   await page.click('[data-testid=btn-deep]');
   await sleep(250);
   const r = await S(() => ({
@@ -603,7 +654,6 @@ await test('Deep Science reveals advanced notes and limits, and switches the con
     level: window.__euv.sim.state.conceptLevel,
   }));
   assert(r.deep.includes('Saha'), 'deep content should include the Saha equation for the plasma');
-  assert(r.deep.includes('Assumptions and limits'), 'limits section missing');
   assert(r.pressed === 'true', 'button should show pressed');
   assert(r.level === 'advanced', 'concept level should be advanced, got ' + r.level);
   await page.click('[data-testid=btn-deep]');

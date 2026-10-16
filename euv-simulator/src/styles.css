@@ -243,6 +243,12 @@ button:disabled { cursor: default; opacity: 0.45; }
 .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--bg-1); font: 500 11.5px/1.2 var(--font-cond); letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-2); }
 .pill i { width: 7px; height: 7px; border-radius: 50%; background: var(--zc); }
 .insp-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.plain { margin: 14px 0 4px; padding: 10px 12px; border-left: 3px solid var(--accent-2); border-radius: 0 6px 6px 0; background: var(--accent-bg); color: var(--fg); font-size: 14.5px; line-height: 1.5; }
+.plain-tag { display: block; margin-bottom: 3px; font: 600 10.5px/1 var(--font-cond); letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+.accuracy { margin: 4px 0 0; display: grid; gap: 4px 0; font-size: 13px; }
+.accuracy dt { font: 600 11px/1.2 var(--font-cond); letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg-2); margin-top: 6px; }
+.accuracy dd { margin: 0; color: var(--fg-2); }
+.accuracy ul { margin: 0; padding-left: 18px; }
 .deep-box { margin-top: 18px; padding: 12px 14px 8px; border: 1px solid color-mix(in srgb, var(--c-plasma) 45%, var(--line)); border-radius: 8px; background: rgba(229, 107, 255, 0.06); }
 .deep-box h3 { margin-top: 0; color: var(--c-plasma); }
 .deep-box h3::after { background: color-mix(in srgb, var(--c-plasma) 30%, var(--line)); }

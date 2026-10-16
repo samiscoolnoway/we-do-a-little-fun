@@ -50,7 +50,7 @@ deprotection with diffusion; development: solubility switch) instead of writing 
 | Chamber: Vacuum / Air | shows why EUV needs vacuum: in air the beam dies within a short, exaggerated distance |
 | Resist: Positive / Negative / Compare | changes the resist tone; compare shows both side by side with the same exposure |
 | Dose | exposure dose; under-exposure and over-exposure change the printed profile |
-| Click a part or a label | opens the component panel (What it is, What it does, Physics, Chemistry, Equation, What you see) with small interactive labs where they help: photon energy, diffraction and resolution, resist response, multilayer interference, mask pattern, Beer–Lambert absorption |
+| Click a part or a label | opens the component panel: a one-line *In plain words* summary, then What it is, What it does, Physics, Chemistry, Equation, What you see, and a *Real science vs. this model* section (established science / simplified here / not shown). Small interactive labs appear where they help: photon energy, diffraction and resolution, resist response, multilayer interference, mask pattern, Beer–Lambert absorption, and a pattern-transfer chart that follows one line pattern from the mask through light, acid, bake, development and etch |
 | Deep Science | adds advanced notes, limits of the model and extra equations to every panel |
 | Concepts tab | the 12 teaching concepts at Beginner / Intermediate / Advanced, each with a jump to the stage that shows it |
 | Quiz tab | 15 questions with explanations |

@@ -325,6 +325,99 @@ export function ResistChart() {
   );
 }
 
+// ═══════════════════════════ pattern transfer, mask → etched film ═══════════════════════════
+/**
+ * One line pattern followed through every step, from the same 1-D model as the 3-D cross-section.
+ * Dashed guides mark the absorber lines on the mask so each later row can be compared with them.
+ */
+export function PatternTransfer() {
+  const tone = useSim((s) => s.tone);
+  const dose = useSim((s) => s.dose);
+  const m = useMemo(() => buildResistModel(108, 5.4, 3, dose), [dose]);
+  const N = m.N;
+  const X0 = 12;
+  const X1 = 348;
+  const cw = (X1 - X0) / N;
+  const xs = (i: number) => X0 + i * cw;
+  const acidMax = Math.max(...Array.from(m.acid));
+  const absorber = (i: number) => {
+    const d = (((m.x[i] / m.P) % 1) + 1) % 1;
+    return d < 0.25 || d > 0.75;
+  };
+  const tones: ('positive' | 'negative')[] = tone === 'compare' ? ['positive', 'negative'] : [tone === 'negative' ? 'negative' : 'positive'];
+  const kept = (t: 'positive' | 'negative', i: number) => (t === 'positive' ? m.solPos : m.solNeg)[i] < 0.5;
+
+  type Row = { title: string; draw: (y: number) => ReactNode };
+  const cols = (y: number, h: number, fill: string, alpha: (i: number) => number) =>
+    Array.from({ length: N }, (_, i) => {
+      const a = alpha(i);
+      return a > 0.01 ? <rect key={i} x={xs(i)} y={y} width={cw + 0.35} height={h} fill={fill} opacity={a} /> : null;
+    });
+  const rows: Row[] = [
+    {
+      title: '1 · Mask: dark absorber, bright mirror (4× larger)',
+      draw: (y) => (
+        <>
+          <rect x={X0} y={y} width={X1 - X0} height={12} fill="var(--c-mask)" opacity={0.75} />
+          {cols(y, 12, 'var(--bg-0)', (i) => (absorber(i) ? 1 : 0))}
+        </>
+      ),
+    },
+    { title: '2 · Light on the resist: edges blurred by diffraction', draw: (y) => cols(y, 12, 'var(--c-euv)', (i) => m.aerial[i]) },
+    { title: '3 · Exposure (scanner): acid where light is bright', draw: (y) => cols(y, 12, 'var(--c-plasma)', (i) => m.acid[i] / acidMax) },
+    { title: '4 · Bake (track): acid spreads, drives the reaction', draw: (y) => cols(y, 12, 'var(--c-resist)', (i) => m.deprot[i]) },
+  ];
+  for (const t of tones) {
+    const name = t === 'positive' ? 'positive' : 'negative';
+    rows.push({
+      title: `5 · Develop (track, ${name}): ${t === 'positive' ? 'reacted resist dissolves' : 'unreacted resist dissolves'}`,
+      draw: (y) => (
+        <>
+          <rect x={X0} y={y + 7} width={X1 - X0} height={5} fill="var(--c-etch)" opacity={0.7} />
+          {cols(y, 7, 'var(--c-resist)', (i) => (kept(t, i) ? 1 : 0))}
+        </>
+      ),
+    });
+    rows.push({
+      title: `6 · Etch + strip (${name}): film kept only under resist`,
+      draw: (y) => (
+        <>
+          <rect x={X0} y={y + 9} width={X1 - X0} height={3} fill="var(--c-silicon)" opacity={0.6} />
+          {cols(y + 3, 6, 'var(--c-etch)', (i) => (kept(t, i) ? 1 : 0))}
+        </>
+      ),
+    });
+  }
+  const ROW_H = 31;
+  const H = rows.length * ROW_H + 6;
+  const guides = [-1, 0, 1].map((k) => X0 + ((k * m.P + m.W / 2) / m.W) * (X1 - X0));
+
+  return (
+    <Lab title="Pattern transfer: from mask to chip layer" hint={`${tone === 'compare' ? 'both tones' : `${tones[0]} tone`} · dose ×${dose.toFixed(2)}`}>
+      <svg viewBox={`0 0 360 ${H}`} role="img" data-testid="transfer-lab" aria-label={`Six steps across three repeats of a line pattern: mask, light on the wafer, acid after exposure, reaction after bake, resist after development and film after etching, for ${tones.join(' and ')} tone.`}>
+        {rows.map((r, k) => {
+          const y = k * ROW_H;
+          return (
+            <g key={r.title}>
+              <text className="svg-t" x={X0} y={y + 10}>{r.title}</text>
+              {r.draw(y + 15)}
+            </g>
+          );
+        })}
+        {guides.map((x, k) => (
+          <line key={k} x1={x} y1={14} x2={x} y2={H - 4} stroke="var(--fg-3)" strokeWidth={1} strokeDasharray="2 3" opacity={0.7} />
+        ))}
+      </svg>
+      <p className="muted" style={{ fontSize: 12.5 }}>
+        Dashed lines mark the absorber lines of the mask. With positive tone the film survives under them; with negative tone it survives between them. Change the Resist and Dose controls to see the result move.
+      </p>
+      <p className="muted" style={{ fontSize: 12.5 }}>
+        Illustrative: this is the same simplified one-dimensional model as the 3-D cross-section. Real blur, thresholds and line widths depend on the scanner settings and on the resist formulation.
+      </p>
+    </Lab>
+  );
+}
+
 // ═══════════════════════════ multilayer & mask diagrams ═══════════════════════════
 export function MultilayerDiagram() {
   const pairs = 13;
@@ -506,6 +599,8 @@ export function WidgetFor({ id }: { id: string }) {
       return <MultilayerDiagram />;
     case 'mask':
       return <MaskDiagram />;
+    case 'transfer':
+      return <PatternTransfer />;
     case 'beer':
       return <BeerLab />;
     default:

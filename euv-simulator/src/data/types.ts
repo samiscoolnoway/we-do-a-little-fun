@@ -24,7 +24,7 @@ export interface EquationDef {
   note?: string;
 }
 
-export type WidgetId = 'photon' | 'resolution' | 'resist' | 'multilayer' | 'mask' | 'beer';
+export type WidgetId = 'photon' | 'resolution' | 'resist' | 'multilayer' | 'mask' | 'beer' | 'transfer';
 
 export interface ComponentInfo {
   id: string;
@@ -34,6 +34,8 @@ export interface ComponentInfo {
   stage: number;
   /** Stages (0-based, inclusive) during which the component is active, when it spans more than one. */
   span?: [number, number];
+  /** one or two sentences in plain language (high-school level), shown first in the inspector */
+  simple: string;
   what: string;
   does: string;
   physics: string;

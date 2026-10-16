@@ -34,6 +34,8 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     name: 'Tin Droplet Generator',
     zone: 'source',
     stage: 0,
+    simple:
+      'A tiny, very hot nozzle that shoots out a steady stream of molten tin drops, each thinner than a human hair, tens of thousands of times per second.',
     what: 'A heated reservoir with a micrometre-scale nozzle and a piezo-electric actuator. It fires a steady stream of molten tin droplets, each roughly 25 µm across, at tens of kilohertz (about 50,000 per second is publicly reported).',
     does: 'Delivers a fresh, identical target to the laser focus for every shot. Droplets that the laser does not use are caught by the tin catcher.',
     physics:
@@ -70,6 +72,8 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     name: 'Molten Tin Droplets',
     zone: 'source',
     stage: 0,
+    simple:
+      'Each drop of liquid tin is the fuel for one flash of EUV light. Surface tension pulls it into a near-perfect little ball.',
     what: 'A sphere of liquid tin about 25 µm across: the fuel for one EUV flash. Only tens of nanograms of tin are used per shot.',
     does: 'Acts as a mass-limited target that is renewed for every pulse, so the plasma starts from the same conditions each time.',
     physics:
@@ -115,6 +119,8 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     name: 'Tin Catcher',
     zone: 'source',
     stage: 0,
+    simple:
+      'A heated funnel that catches the tin drops the laser did not use, so tin does not pile up inside the machine.',
     what: 'A funnel-shaped receptacle at the bottom of the droplet path, kept hot enough to keep the tin liquid.',
     does: 'Catches the droplets and debris that the laser did not turn into plasma so tin does not build up inside the chamber.',
     physics:
@@ -145,6 +151,8 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     name: 'CO₂ Laser',
     zone: 'source',
     stage: 1,
+    simple:
+      'A powerful infrared laser. It does not print anything itself: its only job is to heat the tin drops until they give off EUV light.',
     what: 'A high-power pulsed carbon-dioxide laser, called the drive laser. It emits mid-infrared light at 10.6 µm, is amplified in several stages and delivered into the source vessel. It is not the light that exposes the wafer.',
     does: 'Supplies the energy that turns a tin droplet into plasma: a weak pre-pulse reshapes the droplet, then a powerful main pulse heats it.',
     physics:
@@ -180,6 +188,8 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     name: 'Pre-pulse and Main Pulse',
     zone: 'source',
     stage: 1,
+    simple:
+      'Two laser shots per drop: a gentle first shot flattens the ball into a thin pancake, then a strong second shot turns the pancake into glowing plasma.',
     what: 'A pair of laser pulses for every droplet. The pre-pulse is weaker and arrives first (microseconds earlier in the real machine); the main pulse carries most of the energy.',
     does: 'The pre-pulse reshapes the droplet into a thin, wide disc or mist so that the main pulse can heat it efficiently into EUV-emitting plasma.',
     physics:
@@ -212,6 +222,8 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     name: 'Tin Plasma',
     zone: 'source',
     stage: 2,
+    simple:
+      'Tin heated so much that its atoms lose many electrons. These charged atoms give off light at 13.5 nm, more like a neon sign than a fire.',
     what: 'A hot, partly ionised cloud of tin a fraction of a millimetre across that lights up for a fraction of a microsecond. It is the source of the EUV light.',
     does: 'Converts part of the laser pulse energy into 13.5 nm radiation emitted in all directions.',
     physics:
@@ -261,6 +273,8 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     zone: 'scanner',
     stage: 2,
     span: [2, 7],
+    simple:
+      'Light with a wavelength of 13.5 nm, about 40 times shorter than visible light. Short waves can draw finer details, but almost everything, even air, swallows this light. You cannot see it; the cyan colour is only for the picture.',
     what: 'Light with a wavelength of 13.5 nm, between ultraviolet and X-rays. Each photon carries about 92 eV. It is invisible to the human eye; the cyan colour used here is only a visualization aid.',
     does: 'Carries the circuit pattern from the mask to the wafer. A shorter wavelength allows finer features (R = k₁λ/NA).',
     physics:
@@ -284,6 +298,8 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     name: 'Collector Mirror',
     zone: 'source',
     stage: 3,
+    simple:
+      'A large curved mirror next to the plasma. It gathers light that flies out in many directions and focuses it into one point.',
     what: 'A large, concave, multilayer-coated mirror shaped like part of an ellipsoid, with a central hole for the laser beam.',
     does: 'Collects the EUV light that the plasma emits over a wide angle and focuses it at the intermediate focus, where it enters the scanner.',
     physics:
@@ -320,6 +336,8 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     zone: 'source',
     stage: 3,
     span: [3, 7],
+    simple:
+      'The light path is pumped almost empty of air, because air would swallow EUV light within a fraction of a millimetre.',
     what: 'The sealed chambers that enclose the whole EUV light path, at very low pressure with a gentle flow of hydrogen in places.',
     does: 'Lets EUV travel metres to the wafer, and keeps contaminants away from the mirrors.',
     physics:
@@ -357,6 +375,8 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     name: 'Intermediate Focus',
     zone: 'source',
     stage: 3,
+    simple:
+      'The bright point where the collector focuses the light. It is the doorway from the light source into the rest of the scanner.',
     what: 'The point where the collector focuses the EUV light, at the boundary between the source module and the scanner. A small aperture there passes the light and helps keep gas and debris on the source side.',
     does: 'Acts as the light source of the scanner: the illuminator images this point, and source power is specified here.',
     physics:
@@ -388,6 +408,8 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     name: 'Illumination Optics',
     zone: 'scanner',
     stage: 4,
+    simple:
+      'A set of mirrors that spreads the light evenly over the mask and makes it arrive from carefully chosen directions.',
     what: 'A set of multilayer mirrors between the intermediate focus and the mask: a field facet mirror, a pupil facet mirror and relay mirror(s). Real illuminators use about four mirrors; this model draws three.',
     does: 'Shapes the beam so that it lights the mask evenly in a narrow arc-shaped slit and arrives from a chosen set of angles.',
     physics:
@@ -418,6 +440,8 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     name: 'Field Facet Mirror',
     zone: 'scanner',
     stage: 4,
+    simple:
+      'A mirror made of many small tilted tiles. It chops the beam into many little beams so that any unevenness averages out.',
     what: 'A mirror built from many small facets, each tilted individually (tens to hundreds of them in real scanners).',
     does: 'Splits the beam into many channels. The shape of each facet matches the arc-shaped slit that will be imaged on the mask.',
     physics: 'Each field facet forms an image of the intermediate focus on its own pupil facet; together, the facets define the illuminated field. Splitting and recombining the channels is what makes the illumination uniform.',
@@ -432,6 +456,8 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     name: 'Pupil Facet Mirror',
     zone: 'scanner',
     stage: 4,
+    simple:
+      'A second tiled mirror that decides from which directions the light reaches the mask. Light arriving at the right angles helps print finer lines.',
     what: 'A second faceted mirror placed at a pupil plane of the illuminator.',
     does: 'Chooses from which angles the light reaches the mask, that is the illumination shape (conventional, annular, dipole…). Each field facet is paired with one pupil facet.',
     physics:
@@ -462,6 +488,8 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     name: 'Reflective Mask',
     zone: 'scanner',
     stage: 5,
+    simple:
+      'The stencil that holds the chip pattern. Unlike a slide, it is a mirror: bare mirror areas reflect the light and dark absorber areas swallow it.',
     what: 'A 152 mm square glass plate with an ultra-flat reflective multilayer on one face and a patterned absorber on top of it. The mask is a mirror, not a transparent slide.',
     does: 'Imprints the circuit pattern on the light. Multilayer regions reflect the EUV, absorber regions (tens of nanometres of tantalum-based material) absorb it. The reflected beam is the pattern, drawn 4× larger than it will be on the wafer.',
     physics:
@@ -478,13 +506,15 @@ export const COMPONENT_LIST: ComponentInfo[] = [
       limits: ['The pattern is a made-up demonstration layout. Real masks are 152 mm wide with a 104 × 132 mm pattern area.'],
     },
     cam: cam([16, 12.6, 0], 8, 6.5, -6, -24),
-    widgets: ['mask'],
+    widgets: ['mask', 'transfer'],
   },
   {
     id: 'projection',
     name: 'Projection Optics',
     zone: 'scanner',
     stage: 6,
+    simple:
+      'A set of very precise curved mirrors that shrinks the mask pattern four times and focuses it sharply onto the wafer.',
     what: 'Six ultra-smooth, aspherical multilayer mirrors in a rigid, temperature-stable frame (for a 0.33 NA scanner). The layout here is a simplified teaching model, not the real design.',
     does: 'Collects the pattern-carrying light from the mask and forms a 4× reduced image on the wafer.',
     physics:
@@ -530,6 +560,8 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     zone: 'scanner',
     stage: 7,
     span: [7, 10],
+    simple:
+      'A thin round slice of pure silicon coated with a light-sensitive film. Many chips are printed on it, one small field at a time.',
     what: 'A 300 mm diameter, 775 µm thick disc of single-crystal silicon coated with underlayers and a thin photoresist film (tens of nanometres), clamped on a wafer stage.',
     does: 'Receives the image. The wafer stage scans the wafer in step with the mask stage and steps between fields until the whole wafer has been exposed.',
     physics:
@@ -560,6 +592,8 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     zone: 'scanner',
     stage: 7,
     span: [7, 10],
+    simple:
+      'A very thin light-sensitive coating. Where EUV light hits it, its chemistry changes, so that later only the exposed (or only the unexposed) parts wash away.',
     what: 'A thin polymer-based (or hybrid or metal-oxide) film that changes its chemistry where it absorbs EUV, creating a hidden “latent image” that is developed later. The chemistry depends on the formulation.',
     does: 'Records the image: after exposure and processing, chosen regions can be washed away and the remaining relief pattern can protect the layer below during etching.',
     physics:
@@ -590,13 +624,15 @@ export const COMPONENT_LIST: ComponentInfo[] = [
       ],
     },
     cam: cam([27, -8.6, 0], 9.5, 8, -12, 8),
-    widgets: ['resist'],
+    widgets: ['transfer', 'resist'],
   },
   {
     id: 'bakePlate',
     name: 'Post-Exposure Bake',
     zone: 'track',
     stage: 8,
+    simple:
+      'After leaving the scanner the wafer is warmed on a hot plate in a separate machine. In common chemically amplified resists, the heat lets each acid molecule made by the light trigger many more reactions, making the hidden pattern much stronger.',
     what: 'A temperature-controlled hot plate in the track (the coater/developer), outside the EUV scanner. The wafer is baked at roughly 90–130 °C for about a minute, depending on the resist.',
     does: 'Drives the acid-catalysed reactions that turn the faint chemical image into a strong solubility contrast (chemical amplification) and smooths standing-wave ripples.',
     physics:
@@ -626,13 +662,15 @@ export const COMPONENT_LIST: ComponentInfo[] = [
       limits: ['Diffusion and reaction are drawn as a random walk of a few steps, not a reaction–diffusion simulation.'],
     },
     cam: cam([24, -14.6, 0], 11, 9),
-    widgets: ['resist'],
+    widgets: ['transfer', 'resist'],
   },
   {
     id: 'developer',
     name: 'Development',
     zone: 'track',
     stage: 9,
+    simple:
+      'A liquid washes away the parts of the coating that became soluble, leaving a raised copy of the pattern on the wafer.',
     what: 'A track module that applies liquid developer to the spinning wafer, rinses it and spins it dry.',
     does: 'Dissolves the more soluble regions of the resist. Positive tone: the exposed regions dissolve. Negative tone: the unexposed regions dissolve. What remains is a relief image of the pattern.',
     physics:
@@ -660,13 +698,15 @@ export const COMPONENT_LIST: ComponentInfo[] = [
       limits: ['Real developers also swell the resist and leave residues; neither is modelled.'],
     },
     cam: cam([10, -14.6, 0], 11, 9),
-    widgets: ['resist'],
+    widgets: ['transfer', 'resist'],
   },
   {
     id: 'etcher',
     name: 'Etch Chamber and Pattern Transfer',
     zone: 'etch',
     stage: 10,
+    simple:
+      'In another machine, a plasma eats into the layer below wherever the coating has been washed away, so the pattern ends up in the chip material itself.',
     what: 'A vacuum plasma-etch tool, a separate machine from the scanner, where reactive ions and radicals remove the underlying film wherever the resist does not protect it.',
     does: 'Transfers the resist’s relief pattern into the material beneath it (the film that becomes wires, gates or trenches). Afterwards the leftover resist is stripped.',
     physics:
@@ -693,12 +733,15 @@ export const COMPONENT_LIST: ComponentInfo[] = [
       limits: ['One generic film and one etch step are shown. The plasma colour changes to orange for the strip step only as a visual cue.'],
     },
     cam: cam([-3, -14.6, 0], 11, 9),
+    widgets: ['transfer'],
   },
   {
     id: 'zoneScanner',
     name: 'EUV Scanner System',
     zone: 'scanner',
     stage: 0,
+    simple:
+      'Everything inside the cyan frame belongs to the EUV scanner: it makes the light and uses it to print a hidden chemical pattern into the coating.',
     what: 'The exposure machine: the EUV source module, the illuminator, the reticle stage, the projection optics and the wafer stage. In this model it is the cyan-outlined region.',
     does: 'Produces EUV light and uses it to print the mask pattern onto a resist-coated wafer. Wafers go in with resist and come out exposed, but with only a hidden chemical image.',
     physics: 'The light path runs in vacuum (with low-pressure hydrogen) because EUV is absorbed by gas, and uses only mirrors because every material absorbs EUV.',
@@ -713,6 +756,8 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     name: 'Downstream Processing',
     zone: 'track',
     stage: 8,
+    simple:
+      'Everything inside the amber frame happens in other machines after printing: baking, developing and etching turn the hidden pattern into a real one.',
     what: 'The machines that finish the job after exposure: the track (post-exposure bake and development) and the plasma-etch tool. They are separate machines, drawn here inside the amber frame.',
     does: 'Turn the hidden image in the resist into a physical pattern: bake to amplify, develop to dissolve, etch to transfer the pattern into the film, then strip the resist.',
     physics: 'Thermal chemistry (bake), liquid-phase dissolution (develop) and plasma physics (etch) are all very different from the vacuum optics inside the scanner.',

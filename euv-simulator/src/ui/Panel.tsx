@@ -133,6 +133,16 @@ function StageGuide() {
   );
 }
 
+/** What the model deliberately leaves out, per zone: proprietary or process-specific details. */
+const NOT_SHOWN: Record<Zone, string> = {
+  source:
+    'Exact dimensions, materials recipes, control software and operating settings of commercial EUV sources are proprietary and are not used. Numbers are rounded public values or marked as illustrative.',
+  scanner:
+    'Exact optical designs, dimensions, control software and operating settings of commercial scanners are proprietary and are not used. Numbers are rounded public values or marked as illustrative.',
+  track: 'Real bake and develop recipes (temperatures, times, chemicals) are chosen for each resist and each factory. Values shown are typical public ranges.',
+  etch: 'Real etch recipes (gases, power, pressure, timing) depend on the material and the factory and are not shown. The etch is drawn schematically.',
+};
+
 function InspectView() {
   const id = useSim((s) => s.selectedId);
   const deep = useSim((s) => s.deep);
@@ -161,6 +171,11 @@ function InspectView() {
         </button>
       </div>
 
+      <p className="plain" data-testid="plain-words">
+        <span className="plain-tag">In plain words</span>
+        {comp.simple}
+      </p>
+
       <Section title="What it is">
         <p>{comp.what}</p>
       </Section>
@@ -184,6 +199,27 @@ function InspectView() {
         <WidgetFor key={w} id={w} />
       ))}
 
+      <Section title="Real science vs. this model">
+        <dl className="accuracy" data-testid="accuracy">
+          <dt>Established science</dt>
+          <dd>
+            {comp.equations.length
+              ? `Standard, publicly documented physics: ${comp.equations.map((e) => e.title.toLowerCase()).join('; ')}.`
+              : 'Follows standard, publicly documented principles; there is no single governing equation here.'}
+          </dd>
+          <dt>Simplified in this model</dt>
+          <dd>
+            <ul>
+              {comp.deep.limits.map((n, i) => (
+                <li key={i}>{n}</li>
+              ))}
+            </ul>
+          </dd>
+          <dt>Not shown</dt>
+          <dd>{NOT_SHOWN[comp.zone]}</dd>
+        </dl>
+      </Section>
+
       {deep ? (
         <div className="deep-box" data-testid="deep-content">
           <h3>
@@ -198,16 +234,10 @@ function InspectView() {
             ))}
           </ul>
           {comp.deep.equations?.map((e, i) => <EquationCard key={i} eq={e} />)}
-          <div className="sub-h">Assumptions and limits of this model</div>
-          <ul>
-            {comp.deep.limits.map((n, i) => (
-              <li key={i}>{n}</li>
-            ))}
-          </ul>
         </div>
       ) : (
         <div className="deep-off">
-          <span>Advanced notes, extra equations and the limits of this model are hidden.</span>
+          <span>Advanced notes and extra equations are hidden.</span>
           <button type="button" className="btn btn-sm btn-deep" onClick={() => sim.toggleDeep()} data-testid="reveal-deep">
             <IconFlask size={14} /> Reveal Deep Science
           </button>
