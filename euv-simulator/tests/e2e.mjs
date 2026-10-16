@@ -1223,7 +1223,8 @@ await test('typewriter: name at once, text types in order, pause / resume / skip
   assert(info.levels.deep.length > 300, 'the deep-science text should be long enough to test pausing');
   await click('[data-testid=tw-tab-deep]');
   let d = await read();
-  for (let k = 0; k < 32 && !(d.level === 'deep' && d.text.length > 0); k++) {
+  // typing advances on animation frames; a software renderer can stall frames for many seconds after a scene change
+  for (let k = 0; k < 80 && !(d.level === 'deep' && d.text.length > 0); k++) {
     // a forced click can land while the card re-renders: click again if the tab did not switch
     if (k % 8 === 7 && d.level !== 'deep') await click('[data-testid=tw-tab-deep]');
     await sleep(250);
