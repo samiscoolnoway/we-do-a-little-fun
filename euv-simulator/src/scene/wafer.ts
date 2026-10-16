@@ -151,7 +151,10 @@ export class WaferModule implements SimModule {
       const p = this.root.position;
       return new THREE.Box3(v3(p.x - WAFER_R - 0.2, p.y - 1.0, -2.2), v3(p.x + WAFER_R + 0.2, p.y + 0.5, 2.2));
     };
-    reg.register('wafer', g, { priority: 1, bounds });
+    // the stage hardware and the wafer are separate components: the stage stays, the wafer travels on
+    reg.register('waferStage', hw, { priority: 1, bounds: () => new THREE.Box3(v3(W0.x - 7.1, W0.y - 1.45, -2.4), v3(W0.x + 5.5, W0.y + 0.05, 2.4)) });
+    reg.register('wafer', this.root, { priority: 1.1, bounds });
+    reg.register('wafer', this.next, { priority: 1.1 });
   }
 
   update(c: FrameCtx) {

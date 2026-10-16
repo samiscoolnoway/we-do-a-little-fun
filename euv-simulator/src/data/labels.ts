@@ -22,6 +22,8 @@ export interface LabelDef {
   kind?: 'part' | 'zone' | 'tag';
   overview?: boolean;
   show?: (c: LabelCtx) => boolean;
+  /** shown only on the closed machine (cabinet names); clicking opens what the cabinet contains */
+  exterior?: boolean;
 }
 
 const L = (d: LabelDef): LabelDef => d;
@@ -55,7 +57,7 @@ export const LABELS: LabelDef[] = [
 
   // ── Mask ──
   L({ id: 'l-reticle', text: 'Reflective Mask', sub: 'multilayer mirror + absorber', comp: 'reticle', ref: 'world', p: [17.15, 13.45, 0], off: [86, 24], color: 'mask', overview: true }),
-  L({ id: 'l-reticlestage', text: 'Reticle Stage', sub: 'scans at 4× wafer speed', comp: 'reticle', ref: 'world', p: [14.2, 14.35, 0], off: [-84, -22], color: 'mask' }),
+  L({ id: 'l-reticlestage', text: 'Reticle Stage', sub: 'scans at 4× wafer speed', comp: 'reticleStage', ref: 'world', p: [14.2, 14.35, 0], off: [-84, -22], color: 'mask' }),
   L({ id: 'l-absorber', text: 'Mask pattern, magnified', sub: 'dark = absorber, bright = mirror', comp: 'reticle', ref: 'world', p: [20.6, 15.3, 1.3], off: [104, 0], color: 'mask' }),
   L({ id: 'l-patterned', text: 'Patterned EUV', sub: 'reflected light carries the pattern', comp: 'euvBeam', ref: 'world', p: [16.8, 9.0, 0], off: [-112, 8], color: 'euv' }),
   L({ id: 'l-patterned2', text: 'Pattern-carrying beam', comp: 'euvBeam', ref: 'world', p: [20.0, 7.75, 0], off: [-6, -48], color: 'euv' }),
@@ -151,6 +153,24 @@ export const LABELS: LabelDef[] = [
   L({ id: 'l-peb', text: 'Post-Exposure Bake', sub: 'hot plate in the track', comp: 'bakePlate', ref: 'world', p: [24, -13.0, 1.2], off: [0, -56], color: 'track', overview: true }),
   L({ id: 'l-developer', text: 'Development', sub: 'track developer module', comp: 'developer', ref: 'world', p: [10, -13.0, 1.2], off: [0, -56], color: 'track', overview: true }),
   L({ id: 'l-etch', text: 'Etch Chamber', sub: 'plasma etch tool', comp: 'etcher', ref: 'world', p: [-3, -12.9, 1.2], off: [0, -56], color: 'etch', overview: true }),
+
+  // ── Supporting systems and stages (shown in their own close-up views) ──
+  L({ id: 'l-waferstage', text: 'Wafer Stage', sub: 'nanometre positioning', comp: 'waferStage', ref: 'world', p: [21.6, -3.75, 2.3], off: [-90, 30], color: 'silicon' }),
+  L({ id: 'l-frame', text: 'Vibration isolation', sub: 'metrology frame on isolators', comp: 'frame', ref: 'world', p: [16.6, -5.0, 2.7], off: [-100, 30], color: 'steel' }),
+  L({ id: 'l-vacuum-pumps', text: 'Turbomolecular pump', sub: 'keeps the light path near vacuum', comp: 'vacuumPumps', ref: 'world', p: [-6.4, -1.9, -2.6], off: [-100, 20], color: 'steel' }),
+  L({ id: 'l-cooling', text: 'Coolant lines', sub: 'blue supply · red return', comp: 'cooling', ref: 'world', p: [-2.4, -4.85, -3.0], off: [90, 24], color: 'steel' }),
+  L({ id: 'l-cabling', text: 'Electronics rack', sub: 'control, power and sensors', comp: 'cabling', ref: 'world', p: [7.3, -0.8, -3.05], off: [90, -20], color: 'steel' }),
+
+  // ── Exterior: cabinet names on the closed machine ──
+  L({ id: 'x-laser', exterior: true, text: 'Drive Laser', sub: 'CO₂ laser cabinet', comp: 'co2Laser', ref: 'world', p: [-16.6, 4.0, 4.6], off: [0, -70], color: 'laser' }),
+  L({ id: 'x-source', exterior: true, text: 'EUV Light Source', sub: 'tin plasma · collector', comp: 'sys-source', ref: 'world', p: [-6.6, 8.0, 4.6], off: [0, -78], color: 'plasma' }),
+  L({ id: 'x-illum', exterior: true, text: 'Illumination Optics', sub: 'beam-shaping mirrors', comp: 'sys-illum', ref: 'world', p: [7.0, 7.4, 4.6], off: [0, -76], color: 'euv' }),
+  L({ id: 'x-reticle', exterior: true, text: 'Reticle Stage', sub: 'reflective mask', comp: 'sys-reticle', ref: 'world', p: [21.2, 16.6, 4.8], off: [0, -54], color: 'mask' }),
+  L({ id: 'x-po', exterior: true, text: 'Projection Optics', sub: '6 mirrors · 4× reduction', comp: 'sys-projection', ref: 'world', p: [27.2, 8.0, 4.8], off: [110, 0], color: 'euv' }),
+  L({ id: 'x-wafer', exterior: true, text: 'Wafer Stage', sub: 'scan and step', comp: 'sys-wafer', ref: 'world', p: [24.0, -1.0, 4.8], off: [-60, 70], color: 'silicon' }),
+  L({ id: 'x-track', exterior: true, text: 'Track: bake + develop', sub: 'separate machine', comp: 'sys-down', ref: 'world', p: [17.0, -13.4, 3.6], off: [0, 58], color: 'track' }),
+  L({ id: 'x-etch', exterior: true, text: 'Etch Tool', sub: 'separate machine', comp: 'etcher', ref: 'world', p: [-3.0, -13.4, 3.6], off: [0, 58], color: 'etch' }),
+  L({ id: 'x-enclosure', exterior: true, text: 'Machine Enclosure', sub: 'inspect the casing itself', comp: 'enclosure', ref: 'world', p: [-19.4, -4.0, 4.6], off: [-30, 64], color: 'steel' }),
 
   // ── Zones ──
   L({ id: 'l-scanner', kind: 'zone', text: 'EUV SCANNER SYSTEM · vacuum', sub: 'source → illuminator → mask → projection → wafer stage', comp: 'zoneScanner', ref: 'world', p: [-19.6, 17.4, 4.2], off: [196, 30], color: 'zone', overview: true }),

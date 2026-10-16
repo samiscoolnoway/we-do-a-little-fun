@@ -33,6 +33,9 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     id: 'dropletGenerator',
     name: 'Tin Droplet Generator',
     zone: 'source',
+    parent: 'sys-source',
+    engineering:
+      "Built around a heated tin reservoir pressurised with inert gas, a filter that keeps solid particles away from the nozzle, a capillary nozzle only micrometres wide and a piezo-electric actuator that sets the break-up frequency. It sits above the laser focus so droplets fall through the first focus of the collector and on into the catcher. Droplet positions are monitored optically so the laser timing can follow small drifts. The real design is not public, so the model shows a schematic body with heater coils.",
     stage: 0,
     simple:
       'A tiny, very hot nozzle that shoots out a steady stream of molten tin drops, each thinner than a human hair, tens of thousands of times per second.',
@@ -71,6 +74,11 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     id: 'droplets',
     name: 'Molten Tin Droplets',
     zone: 'source',
+    parent: 'sys-source',
+    kind: 'process',
+    context: ['dropletGenerator', 'catcher'],
+    engineering:
+      "Not a machine part but the fuel stream: liquid tin droplets roughly 25 µm across, travelling at tens of metres per second with even spacing. Each arrival must be synchronised with the laser pulses to a small fraction of a microsecond. Unused droplets fall into the catcher; used ones become plasma and debris. Here they are enlarged enormously and slowed down so they can be seen.",
     stage: 0,
     simple:
       'Each drop of liquid tin is the fuel for one flash of EUV light. Surface tension pulls it into a near-perfect little ball.',
@@ -118,6 +126,9 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     id: 'catcher',
     name: 'Tin Catcher',
     zone: 'source',
+    parent: 'sys-source',
+    engineering:
+      "A heated receptacle under the droplet path, kept above tin's 232 °C melting point so the metal stays liquid and drains away. Its shape is chosen so arriving droplets do not splash back toward the collector. It connects to a tin-recovery path; how real systems route and recycle the tin is not public, so the funnel here is schematic.",
     stage: 0,
     simple:
       'A heated funnel that catches the tin drops the laser did not use, so tin does not pile up inside the machine.',
@@ -150,6 +161,9 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     id: 'co2Laser',
     name: 'CO₂ Laser',
     zone: 'source',
+    parent: 'sys-source',
+    engineering:
+      "A master oscillator produces short infrared pulses that pass through a chain of gas-discharge power amplifiers and then a beam-transport line into the source vessel. Focusing optics aim the beam through the central hole of the collector onto the droplet, and timing electronics fire the pre-pulse and the main pulse. In practice the drive laser is a large installation of its own; the model reduces it to one box and a straight beam.",
     stage: 1,
     simple:
       'A powerful infrared laser. It does not print anything itself: its only job is to heat the tin drops until they give off EUV light.',
@@ -187,6 +201,11 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     id: 'laserPulses',
     name: 'Pre-pulse and Main Pulse',
     zone: 'source',
+    parent: 'sys-source',
+    kind: 'process',
+    context: ['co2Laser', 'collector'],
+    engineering:
+      "Two pulses per droplet, timed from droplet-position measurements: a weaker pre-pulse that reshapes the droplet and, microseconds later, the main pulse that heats it into plasma. The two foci sit at slightly different heights because the droplet keeps moving between them. Pulse energies, lengths and delays are tuned by the machine maker and are not modelled; only the order and geometry are shown.",
     stage: 1,
     simple:
       'Two laser shots per drop: a gentle first shot flattens the ball into a thin pancake, then a strong second shot turns the pancake into glowing plasma.',
@@ -221,6 +240,11 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     id: 'plasma',
     name: 'Tin Plasma',
     zone: 'source',
+    parent: 'sys-source',
+    kind: 'process',
+    context: ['collector', 'dropletGenerator', 'catcher'],
+    engineering:
+      "The plasma forms at the first focus of the collector, a fraction of a millimetre across, for a fraction of a microsecond per shot. Around it, hydrogen gas flows slow down fast tin ions and vapour so they do not reach the collector. Energy that does not leave as useful 13.5 nm light ends up as heat, which the cooling system removes. Shown here as a slowed, enlarged flash.",
     stage: 2,
     simple:
       'Tin heated so much that its atoms lose many electrons. These charged atoms give off light at 13.5 nm, more like a neon sign than a fire.',
@@ -271,6 +295,11 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     id: 'euvBeam',
     name: '13.5 nm EUV Radiation',
     zone: 'scanner',
+    parent: 'sys-source',
+    kind: 'process',
+    context: ['collector', 'ffm', 'pfm', 'illumination', 'reticle', 'projection', 'waferStage'],
+    engineering:
+      "Not a solid object: light following the optical path from the plasma via the collector, the intermediate focus, the illuminator mirrors and the mask, through the projection mirrors to the wafer. Every surface it meets is a multilayer mirror, and the whole path is enclosed in low-pressure gas. Beam widths and pulse speeds in the model are visual aids.",
     stage: 2,
     span: [2, 7],
     simple:
@@ -297,6 +326,9 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     id: 'collector',
     name: 'Collector Mirror',
     zone: 'source',
+    parent: 'sys-source',
+    engineering:
+      "A large concave mirror with a central hole for the laser beam, coated with a molybdenum/silicon multilayer and a protective capping layer. Its shape is part of an ellipsoid, so it images the plasma (first focus) onto the intermediate focus (second focus). It faces the plasma directly, so it is cooled, shielded by hydrogen flows and kept clean; contamination sets its lifetime. Real dimensions and mounts are not modelled.",
     stage: 3,
     simple:
       'A large curved mirror next to the plasma. It gathers light that flies out in many directions and focuses it into one point.',
@@ -327,6 +359,7 @@ export const COMPONENT_LIST: ComponentInfo[] = [
       ],
       limits: ['The dish is a smooth surface of revolution; the holes, mounts and gas channels of real collectors are not modelled.'],
     },
+    inspectView: [64, 12],
     cam: cam([-9.2, 3, 0], 10, 8, -28),
     widgets: ['multilayer'],
   },
@@ -334,6 +367,9 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     id: 'vacuum',
     name: 'Vacuum Chamber',
     zone: 'source',
+    parent: 'sys-source',
+    engineering:
+      "The light path runs through a chain of sealed compartments: the source vessel, the illuminator, the reticle and projection areas and the wafer-stage compartment. Apertures and gas locks separate them so each can keep its own pressure and cleanliness. Pumps remove gas continuously while a gentle hydrogen flow is kept where the optics need it. The model shows the source vessel as a cylinder; the other compartments are implied by the cabinets.",
     stage: 3,
     span: [3, 7],
     simple:
@@ -374,6 +410,9 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     id: 'intermediateFocus',
     name: 'Intermediate Focus',
     zone: 'source',
+    parent: 'sys-source',
+    engineering:
+      "The handover point between the source module and the scanner. A small aperture there passes the converging light while limiting the gas and debris that can travel from the source into the cleaner optics. Because the illuminator images this point, the size and stability of the focus matter for even light on the mask.",
     stage: 3,
     simple:
       'The bright point where the collector focuses the light. It is the doorway from the light source into the rest of the scanner.',
@@ -407,6 +446,9 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     id: 'illumination',
     name: 'Illumination Optics',
     zone: 'scanner',
+    parent: 'sys-illum',
+    engineering:
+      "A few multilayer mirrors on stiff, temperature-controlled mounts. The field facet mirror and the pupil facet mirror shape the beam; relay mirrors fold and focus it onto the mask about 6° from the normal. The mounts keep the mirrors stable to nanometres while they warm up from absorbed light. In the model the relay is a single round mirror on a post.",
     stage: 4,
     simple:
       'A set of mirrors that spreads the light evenly over the mask and makes it arrive from carefully chosen directions.',
@@ -439,6 +481,9 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     id: 'ffm',
     name: 'Field Facet Mirror',
     zone: 'scanner',
+    parent: 'sys-illum',
+    engineering:
+      "A mirror divided into many small multilayer-coated facets, each with its own tilt; in some designs the tilts can be changed to switch illumination settings. It sits in a plane conjugate to the mask, so the outline of each facet matches the illuminated slit on the mask. The model uses a simple grid of rectangular tiles.",
     stage: 4,
     simple:
       'A mirror made of many small tilted tiles. It chops the beam into many little beams so that any unevenness averages out.',
@@ -449,12 +494,16 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     equations: [eq('Statistical uniformity', 'σ_{I} / I ≈ 1 / √N', [['σ_I / I', 'relative non-uniformity of the overlapped image', ''], ['N', 'number of facets', '']], 'N = 400 → about 5%')],
     see: 'A grid of small tiles, each tilted a little differently. The beam spreads across the grid and each tile sends its share toward the pupil facet mirror.',
     deep: { notes: ['In some designs the facets can be re-tilted to switch between illumination settings.'], limits: ['Tile count and tilts are schematic.'] },
+    inspectView: [-20, 40],
     cam: cam([3.17, 4.9, 0], 5.5, 4, -22),
   },
   {
     id: 'pfm',
     name: 'Pupil Facet Mirror',
     zone: 'scanner',
+    parent: 'sys-illum',
+    engineering:
+      "A second faceted mirror placed where the illuminator forms images of the source, a pupil plane. Which facets receive light decides the angles at which light reaches the mask: conventional, annular, dipole or custom shapes. In the model a hexagonal array of round tiles shows a dipole setting, with the lit facets glowing.",
     stage: 4,
     simple:
       'A second tiled mirror that decides from which directions the light reaches the mask. Light arriving at the right angles helps print finer lines.',
@@ -480,6 +529,7 @@ export const COMPONENT_LIST: ComponentInfo[] = [
       notes: ['For a grating of pitch p, a dipole matched to p lets the 0 and −1 orders both fit inside the NA when p ≥ λ / (2 NA), instead of p ≥ λ / NA for on-axis light. Try it in the diffraction lab of the Projection Optics inspector.'],
       limits: ['Which facets are lit is fixed here; real systems choose them by source–mask optimisation.'],
     },
+    inspectView: [-20, 40],
     cam: cam([9.08, 3.8, 0], 5.5, 4, -22),
     widgets: ['resolution'],
   },
@@ -487,6 +537,9 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     id: 'reticle',
     name: 'Reflective Mask',
     zone: 'scanner',
+    parent: 'sys-reticle',
+    engineering:
+      "A 152 mm square, 6.35 mm thick plate of ultra-low-expansion glass with a Mo/Si multilayer mirror, a thin capping layer and a patterned absorber on its working face. It is held face-down by an electrostatic clamp on the reticle stage and may be protected by a pellicle, a thin membrane that keeps particles out of focus. In the model the mask hangs face-down above the projection optics, with a magnified copy of its pattern beside it.",
     stage: 5,
     simple:
       'The stencil that holds the chip pattern. Unlike a slide, it is a mirror: bare mirror areas reflect the light and dark absorber areas swallow it.',
@@ -505,6 +558,7 @@ export const COMPONENT_LIST: ComponentInfo[] = [
       ],
       limits: ['The pattern is a made-up demonstration layout. Real masks are 152 mm wide with a 104 × 132 mm pattern area.'],
     },
+    inspectView: [-30, -30],
     cam: cam([16, 12.6, 0], 8, 6.5, -6, -24),
     widgets: ['mask', 'transfer'],
   },
@@ -512,6 +566,9 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     id: 'projection',
     name: 'Projection Optics',
     zone: 'scanner',
+    parent: 'sys-projection',
+    engineering:
+      "A housing holding six aspheric multilayer mirrors, each on mounts with actuators that can correct position and tilt during operation. The housing is temperature-stabilised, kept in low-pressure hydrogen and carried by the isolated metrology frame so stage vibrations do not reach it. Mirror surfaces must be accurate to a small fraction of a nanometre. The six-mirror zigzag here is a teaching layout, not a real optical prescription.",
     stage: 6,
     simple:
       'A set of very precise curved mirrors that shrinks the mask pattern four times and focuses it sharply onto the wafer.',
@@ -558,6 +615,9 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     id: 'wafer',
     name: 'Silicon Wafer',
     zone: 'scanner',
+    parent: 'sys-wafer',
+    engineering:
+      "A 300 mm silicon disc about 0.775 mm thick, coated in the track with an underlayer and a photoresist film tens of nanometres thick. During exposure it lies on the wafer table, held flat by electrostatic clamping because suction does not work in vacuum. Afterwards it leaves the scanner through a load lock to the track.",
     stage: 7,
     span: [7, 10],
     simple:
@@ -590,6 +650,9 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     id: 'resist',
     name: 'Photoresist',
     zone: 'scanner',
+    parent: 'sys-wafer',
+    engineering:
+      "The resist is spin-coated in the track: a small amount of resist solution is spread over the spinning wafer and baked to drive off solvent, leaving a film tens of nanometres thick. Chemically amplified resists combine a polymer, a photoacid generator and a quencher; metal-oxide resists use different chemistry. In this model the film is seen only in the magnified cross-section, which exaggerates its thickness greatly.",
     stage: 7,
     span: [7, 10],
     simple:
@@ -630,6 +693,9 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     id: 'bakePlate',
     name: 'Post-Exposure Bake',
     zone: 'track',
+    parent: 'sys-down',
+    engineering:
+      "A temperature-controlled hot plate inside the track, usually with a lid and controlled gas flow, holding the wafer just above the plate surface. Temperature uniformity is critical because the acid-catalysed reactions speed up strongly with temperature. A chill plate normally follows to stop the reaction at a defined time. Exact recipes depend on the resist and are not modelled.",
     stage: 8,
     simple:
       'After leaving the scanner the wafer is warmed on a hot plate in a separate machine. In common chemically amplified resists, the heat lets each acid molecule made by the light trigger many more reactions, making the hidden pattern much stronger.',
@@ -668,6 +734,9 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     id: 'developer',
     name: 'Development',
     zone: 'track',
+    parent: 'sys-down',
+    engineering:
+      "A spin module: a nozzle dispenses developer onto the spinning wafer, the liquid stands as a puddle for a set time, deionised water rinses it off and the wafer spins dry. A catch cup around the wafer collects the liquids. Development time, temperature and rinse sequence are tuned for each resist.",
     stage: 9,
     simple:
       'A liquid washes away the parts of the coating that became soluble, leaving a raised copy of the pattern on the wafer.',
@@ -704,6 +773,9 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     id: 'etcher',
     name: 'Etch Chamber and Pattern Transfer',
     zone: 'etch',
+    parent: 'sys-down',
+    engineering:
+      "A vacuum chamber in a separate etch tool with gas inlets, a radio-frequency plasma source, an electrostatic chuck that holds and cools the wafer, and pumps. Gas chemistry, pressure, plasma power and ion energy are set by the recipe for each layer. After etching, leftover resist is removed (ashing) before the next process step.",
     stage: 10,
     simple:
       'In another machine, a plasma eats into the layer below wherever the coating has been washed away, so the pattern ends up in the chip material itself.',
@@ -739,6 +811,10 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     id: 'zoneScanner',
     name: 'EUV Scanner System',
     zone: 'scanner',
+    parent: 'sys-support',
+    kind: 'zone',
+    engineering:
+      "Contains the EUV source module, the illuminator, the reticle stage, the projection optics and the wafer stage, mounted on a common base with vibration isolation, wrapped in enclosures and connected to cooling, vacuum, power and control utilities.",
     stage: 0,
     simple:
       'Everything inside the cyan frame belongs to the EUV scanner: it makes the light and uses it to print a hidden chemical pattern into the coating.',
@@ -755,6 +831,10 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     id: 'zoneDownstream',
     name: 'Downstream Processing',
     zone: 'track',
+    parent: 'sys-down',
+    kind: 'zone',
+    engineering:
+      "The track (coating, bake, develop) is usually docked directly to the scanner so wafers move between them automatically; etching happens in separate plasma-etch tools elsewhere in the fab.",
     stage: 8,
     simple:
       'Everything inside the amber frame happens in other machines after printing: baking, developing and etching turn the hidden pattern into a real one.',
@@ -766,6 +846,190 @@ export const COMPONENT_LIST: ComponentInfo[] = [
     see: 'The wafer is carried out of the scanner along the amber rail and visits the bake plate, the developer and the etch chamber in turn.',
     deep: { notes: ['In a real fab these steps are repeated many times: a modern chip needs dozens of lithography layers.'], limits: ['One wafer and one pattern are shown, without coating or cleaning steps.'] },
     cam: { t: [10, -15, 0], az: -8, el: 8, fit: [46, 13] },
+  },
+  {
+    id: 'reticleStage',
+    name: 'Reticle Stage',
+    zone: 'scanner',
+    parent: 'sys-reticle',
+    engineering:
+      'A long-stroke stage for the scan motion carries a short-stroke fine stage for nanometre corrections; both are driven by electromagnetic motors and work in vacuum or very low pressure. The reticle is held face-down by an electrostatic clamp, and position sensors (interferometers or encoders) together with alignment marks tie the mask position to the projection optics. Real stage designs are proprietary; the model shows a carriage, a clamp and two guide rails.',
+    stage: 5,
+    span: [5, 7],
+    simple: 'The precision platform that holds the mask upside down and slides it through the light, exactly in step with the wafer far below.',
+    what: 'A moving stage that carries the reticle on an electrostatic clamp. It scans the mask through the illuminated slit while the wafer stage scans underneath at a quarter of the speed.',
+    does: 'Moves the mask pattern through the light so a whole field is exposed, and keeps the mask position known to nanometres during every scan.',
+    physics:
+      'Because the projection optics demagnify 4×, the mask must move four times as far and four times as fast as the wafer during a scan: v_mask = M · v_wafer. Quick starts and stops at the ends of each scan need large forces (F = m · a), so stages are light but stiff and driven by electromagnetic linear motors. Their position is measured with laser interferometers or optical encoders against a stable reference; any timing mismatch between mask and wafer would smear the image.',
+    chemistry: 'No chemistry is involved. Clamp and stage materials must release very little gas in vacuum, and the mask surface must stay free of particles.',
+    equations: [
+      eq('Scan synchronisation', 'v_{mask} = M · v_{wafer}', [['v_mask', 'mask scan speed', 'm/s'], ['M', 'reduction ratio of the projection optics (4)', ''], ['v_wafer', 'wafer scan speed', 'm/s']], 'M = 4: when the wafer moves 1 mm, the mask moves 4 mm in the same time.'),
+      eq('Force to accelerate the stage', 'F = m · a', [['F', 'motor force', 'N'], ['m', 'moving mass', 'kg'], ['a', 'acceleration', 'm/s²']], 'Illustrative: 20 kg accelerated at 100 m/s² needs 2 kN.'),
+    ],
+    see: 'The dark carriage and clamp above the mask slide along two rails while the bright slit of light sweeps across the pattern.',
+    deep: {
+      notes: [
+        'The control system compares the measured positions of mask and wafer thousands of times per second and corrects any difference.',
+        'Only a narrow slit of the field is imaged at any moment; scanning mask and wafer together is what lets a scanner expose a large field with smaller optics.',
+      ],
+      limits: ['Stage size, travel and motor layout are schematic.', 'The 4× speed ratio is real; the motion shown is slowed down enormously.'],
+    },
+    cam: cam([16, 14.1, 0], 7.5, 4.5, -24, 20),
+  },
+  {
+    id: 'waferStage',
+    name: 'Wafer Stage',
+    zone: 'scanner',
+    parent: 'sys-wafer',
+    engineering:
+      'A long-stroke stage carries a short-stroke fine stage with the wafer table, which clamps the wafer electrostatically on a pattern of tiny pins. Position is measured by laser interferometers or grid encoders referenced to the metrology frame, and level and alignment sensors map each wafer before exposure. Cables and coolant reach the moving stage through flexible carriers designed to disturb it as little as possible.',
+    stage: 7,
+    simple: 'The fast, ultra-precise table that carries the wafer under the light, stepping from field to field and scanning each one while keeping the wafer exactly in focus.',
+    what: 'A positioning system with a wafer table and electrostatic clamp, driven by electromagnetic motors and measured by interferometers or encoders, with level and alignment sensors nearby.',
+    does: 'Positions every field of the wafer under the projection optics, scans it in step with the mask and holds focus and overlay within nanometres.',
+    physics:
+      'Each layer of a chip must land on top of the previous one within a few nanometres (overlay), so the stage position is measured continuously and corrected by feedback control. Before exposure, sensors map the wafer height (levelling) and locate alignment marks. Temperature matters too: silicon expands by about 2.6 × 10⁻⁶ per kelvin, so a 0.01 K change across 300 mm moves the edge by about 8 nm.',
+    chemistry: 'No chemistry is involved. Clamp surfaces must stay clean, because a particle under the wafer bends it and spoils focus.',
+    equations: [
+      eq('Thermal expansion', 'ΔL = α · L · ΔT', [['ΔL', 'change in length', 'm'], ['α', 'linear expansion coefficient, ≈ 2.6×10⁻⁶ for silicon', '1/K'], ['L', 'length', 'm'], ['ΔT', 'temperature change', 'K']], 'L = 0.3 m, ΔT = 0.01 K → ΔL ≈ 7.8 nm.'),
+      eq('Electrostatic clamping pressure', 'P ≈ ε_{0} ε_{r} E^{2} / 2', [['P', 'clamping pressure', 'Pa'], ['ε₀', 'vacuum permittivity', 'F/m'], ['ε_r', 'relative permittivity of the clamp dielectric', ''], ['E', 'electric field across the gap', 'V/m']], undefined, 'Order-of-magnitude estimate; real clamps use structured surfaces with tiny contact pins.'),
+    ],
+    see: 'The dark stage block and the chuck under the wafer, on rails over a long base; a small sensor head with a red light beside it stands in for the position sensors.',
+    deep: {
+      notes: [
+        'Publicly documented dual-stage designs measure one wafer while another is being exposed, so the slow measurements do not cost exposure time.',
+        'High stage accelerations keep throughput up, which is why the optics sit on a separate, vibration-isolated frame.',
+      ],
+      limits: ['The stage is drawn as a block on rails; motors, sensors and dual-stage hardware are not modelled in detail.'],
+    },
+    cam: cam([26.2, -3.0, 0], 13, 5, -18, 18),
+  },
+  {
+    id: 'frame',
+    name: 'Structural Frame and Vibration Isolation',
+    zone: 'scanner',
+    parent: 'sys-support',
+    engineering:
+      'Heavy base beams spread the load on the fab floor; pneumatic or active isolators carry a metrology frame made of stiff, low-expansion material. Stage motors push against the base frame (force path) while interferometers and encoders measure against the metrology frame (measurement path), so the forces never reach the reference. The model shows beams, six isolators, a metrology plate and four columns as a simplified representation.',
+    stage: 6,
+    simple: 'The heavy base and the quiet inner frame that keep the optics so still that floor vibrations and the fast-moving stages cannot blur the image.',
+    what: 'A rigid base frame on the floor, with vibration isolators carrying a separate metrology frame on which the projection optics and the position sensors are mounted.',
+    does: 'Separates the parts that move and shake (stages, pumps, coolant flows) from the parts that must stay still (the optics and the sensors that measure positions).',
+    physics:
+      'A mass on a spring isolates vibrations above its natural frequency f_n = (1/2π)·√(k/m): far above f_n almost no motion is passed on, near f_n it is amplified. Isolators with very low natural frequencies, around 1 Hz, therefore block most building vibration. A second principle is separating the force path from the measurement path: motors push against one frame while sensors measure against another that carries no forces.',
+    chemistry: 'No chemistry is involved. Frame materials are chosen for stiffness, damping and low thermal expansion.',
+    equations: [
+      eq('Natural frequency of a spring–mass mount', 'f_{n} = (1/2π) √(k / m)', [['f_n', 'natural frequency', 'Hz'], ['k', 'spring stiffness', 'N/m'], ['m', 'supported mass', 'kg']], 'm = 1000 kg, k = 4×10⁴ N/m → f_n ≈ 1 Hz.'),
+      eq('Transmissibility (undamped)', 'T = 1 / | 1 − (f/f_{n})^{2} |', [['T', 'fraction of floor vibration passed to the frame', ''], ['f', 'vibration frequency', 'Hz'], ['f_n', 'natural frequency of the mount', 'Hz']], 'f = 10 Hz, f_n = 1 Hz → T ≈ 1%.', 'Real isolators add damping and active feedback.'),
+    ],
+    see: 'Steel base beams under the scanner, cylindrical isolators with bellows, a dark metrology plate under the optics and wafer stage, and the columns that carry the projection optics box.',
+    deep: {
+      notes: [
+        'Active isolation measures the remaining motion with accelerometers and cancels it with actuators, complementing the passive springs.',
+        'Fab floors are themselves built to be very stiff, and lithography tools often stand on dedicated foundations.',
+      ],
+      limits: ['Positions, sizes and number of isolators are illustrative, not the real arrangement.'],
+    },
+    cam: cam([14, -4.6, 0], 40, 9, -14, 14),
+  },
+  {
+    id: 'vacuumPumps',
+    name: 'Vacuum Pumps and Valves',
+    zone: 'scanner',
+    parent: 'sys-support',
+    engineering:
+      'Each compartment has its own turbomolecular pumps on large flanges, backed by dry roughing pumps through foreline piping, with gate valves that isolate sections for service. Hydrogen supply lines, pressure gauges and residual-gas analysers monitor and control the gas environment. The model shows three turbo pumps, a manifold, foreline pipes and a gate valve where the source meets the illuminator.',
+    stage: 3,
+    simple: 'Pumps that keep the inside of the machine almost empty of gas, because even a little air would swallow the EUV light.',
+    what: 'Turbomolecular pumps on the source vessel, the optics compartments and the stage areas, backed by roughing pumps and connected through valves and pipes.',
+    does: 'Removes gas and contaminants continuously while a controlled, low-pressure hydrogen flow is fed in where the optics need it.',
+    physics:
+      'At low pressure gas molecules rarely meet each other: the mean free path λ = k_B·T / (√2·π·d²·p) grows to millimetres or metres, so gas moves molecule by molecule (molecular flow). A turbomolecular pump has rotor blades moving about as fast as the molecules themselves, and each molecule that hits a blade is pushed toward the exhaust. Pumping speed S and chamber volume V set how quickly pressure falls: p(t) = p₀·e^(−S·t/V).',
+    chemistry: 'Besides hydrogen, the pumps remove tin hydride (SnH₄) formed when hydrogen radicals clean tin deposits, and the water and hydrocarbons that would otherwise contaminate the mirrors. Pump materials and lubricants must not add contamination.',
+    equations: [
+      eq('Mean free path', 'λ = k_{B} T / ( √2 π d^{2} p )', [['λ', 'mean free path', 'm'], ['k_B T', 'thermal energy, 4.1×10⁻²¹ J at 300 K', 'J'], ['d', 'molecular diameter, ≈ 3.7×10⁻¹⁰ m for N₂', 'm'], ['p', 'pressure', 'Pa']], 'N₂ at 1 Pa → λ ≈ 7 mm; at 10⁻³ Pa → about 7 m.'),
+      eq('Pump-down', 'p(t) = p_{0} e^{−S t / V}', [['p', 'pressure', 'Pa'], ['S', 'pumping speed', 'm³/s'], ['t', 'time', 's'], ['V', 'chamber volume', 'm³']], undefined, 'Ideal case: ignores gas released by the walls, which dominates at low pressure.'),
+    ],
+    see: 'Ribbed cylinders (turbo pumps) under the source vessel, behind the optics box and beside the wafer stage, linked by grey pipes to a manifold; a valve ring sits where the source meets the illuminator.',
+    deep: {
+      notes: [
+        'EUV tools do not run in hard vacuum everywhere: a few pascals of hydrogen near the source and optics slow debris and clean surfaces, while apertures and gas locks hold pressure differences between compartments.',
+        'At low pressure, gas released by surfaces (outgassing) usually limits the achievable pressure more than pump speed does.',
+      ],
+      limits: ['Pump positions, counts and sizes are illustrative.'],
+    },
+    cam: cam([10, -1.5, 0], 44, 13, -12, 12),
+  },
+  {
+    id: 'cooling',
+    name: 'Cooling and Thermal Management',
+    zone: 'scanner',
+    parent: 'sys-support',
+    engineering:
+      'Chillers outside the cleanroom feed manifolds that split into many separately regulated loops, each with flow and temperature sensors. Flexible lines reach moving stages, and loops inside the vacuum use welded, leak-tested connections. The model shows one manifold with paired supply and return lines to the main heat sources.',
+    stage: 3,
+    simple: 'Water circuits that carry heat away, because the laser, plasma, mirrors and motors would otherwise warm up and the machine would lose its nanometre precision.',
+    what: 'A network of temperature-controlled coolant loops with supply and return lines to the source, collector, laser, optics, stages and electronics, fed from chillers and manifolds.',
+    does: 'Removes heat where it is produced and holds critical parts at a constant temperature, often to within thousandths of a kelvin.',
+    physics:
+      'Heat carried away by a liquid loop is Q = ṁ·c_p·ΔT. Multilayer mirrors absorb roughly a third of the EUV light that reaches them, and that heat makes them expand; a change of even a nanometre alters the image. Mirror substrates therefore use materials with near-zero thermal expansion, and the remaining heat flows by conduction into cooled mounts.',
+    chemistry: 'Coolant water is deionised and filtered so it neither corrodes the lines nor leaves deposits; loops near the vacuum must never leak.',
+    equations: [
+      eq('Heat carried by a coolant loop', 'Q = ṁ · c_{p} · ΔT', [['Q', 'heat removed', 'W'], ['ṁ', 'mass flow of coolant', 'kg/s'], ['c_p', 'specific heat, ≈ 4180 for water', 'J/(kg·K)'], ['ΔT', 'temperature rise of the coolant', 'K']], 'Q = 1 kW with ΔT = 2 K → ṁ ≈ 0.12 kg/s, about 7 litres per minute.'),
+    ],
+    see: 'Blue (supply) and red (return) lines run from a manifold to the source vessel, the laser, the optics box and the stages. The colours are only a visual code.',
+    deep: {
+      notes: [
+        'Temperature stability matters as much as cooling power: a slowly drifting temperature moves parts more than a constant heat load does.',
+        'The drive laser and the source dissipate by far the most power; the optics need the most stable temperatures.',
+      ],
+      limits: ['Line routing, colours and the manifold are illustrative; real systems use many separate loops.'],
+    },
+    cam: cam([6, 3, 0], 46, 20, -12, 12),
+  },
+  {
+    id: 'cabling',
+    name: 'Power, Control and Sensors',
+    zone: 'scanner',
+    parent: 'sys-support',
+    engineering:
+      'Power and signal cables run in trays to electronics racks; flexible cable carriers follow the moving stages. Sensor heads (interferometers or encoders for position, optical level and alignment sensors) sit close to the parts they measure, and vacuum feedthroughs pass signals through chamber walls. The rack, trays and sensor heads in the model stand in for a large, proprietary control system.',
+    stage: 7,
+    simple: 'Many kilometres of wiring and many sensors that power the motors and lasers and let the control computers measure and adjust everything thousands of times a second.',
+    what: 'Cable trays and flexible cable carriers, electronics racks, and sensors such as position encoders, interferometers and level and alignment sensors.',
+    does: 'Delivers power and signals between the control electronics and the machine, and feeds the measurements that keep stages, optics and source synchronised.',
+    physics:
+      'Precision positioning relies on feedback control: sensors measure the position, a controller compares it with the target and drives the motors to correct the error. Cables that move with a stage push and pull on it, so carriers are designed for small, repeatable forces, and shielding keeps electrical noise out of sensitive signals.',
+    chemistry: 'Cables inside the vacuum need insulation that releases very little gas (low outgassing), because vapours from plastics could deposit on the mirrors.',
+    equations: [eq('Resistive heating of a cable', 'P = I^{2} R', [['P', 'heat produced', 'W'], ['I', 'current', 'A'], ['R', 'cable resistance', 'Ω']], 'I = 10 A, R = 0.05 Ω → P = 5 W of heat for the cooling to remove.')],
+    see: 'Trays along the top, a dark electronics rack with status lights, a flexible chain feeding the wafer stage and small sensor heads beside the wafer.',
+    deep: {
+      notes: ['Stage control loops run at kilohertz rates; sensors, electronics and mechanics are designed together.', 'Electronics that produce a lot of heat are kept away from the most temperature-sensitive areas.'],
+      limits: ['The rack, trays and sensor heads are schematic placeholders.'],
+    },
+    cam: cam([8, 2, 0], 46, 18, -12, 12),
+  },
+  {
+    id: 'enclosure',
+    name: 'Machine Enclosure',
+    zone: 'scanner',
+    parent: 'sys-support',
+    engineering:
+      'Panels hang on a steel frame and open for service; door interlocks connect to the laser and high-voltage safety systems. Utility interfaces bring in coolant, gases, vacuum exhaust, power and data. In the model each module has its own cabinet with an identification plate, and the track and etch tool have separate cabinets because they are separate machines.',
+    stage: 0,
+    simple: 'The outer cabinets of the machine. They keep dust, light, heat and people out, and keep the laser light and dangerous voltages in.',
+    what: 'Modular painted-metal and aluminium panels on a structural frame, with service doors, ventilation, inspection windows, utility connections and identification and warning plates.',
+    does: 'Gives the machine a clean, temperature-stable internal environment, provides safe access for service, and has interlocks that stop the laser when a door opens.',
+    physics:
+      'The enclosure is not the vacuum boundary: the vacuum chambers sit inside it. Its job is thermal and particle control. Filtered air at a controlled temperature flows through it so heat from electronics and motors does not drift into the optics.',
+    chemistry: 'Panels and seals are chosen to shed few particles and release little vapour, because airborne molecular contamination can affect optics and resist.',
+    equations: [],
+    see: 'Light-grey cabinets with dark trim, service doors with handles and fasteners, vents, inspection windows, pipes and cable trays on top, and identification and warning plates. Open the machine to watch the panels retract.',
+    deep: {
+      notes: ['Lithography tools stand in some of the cleanest areas of a fab and add their own filtered mini-environments.', 'Service access is designed in: whole modules can be opened, swapped or serviced.'],
+      limits: ['Inspired by publicly shown EUV systems; panel layout, proportions, labels and colours are illustrative, not the real design.'],
+    },
+    cam: { t: [6.5, 3, 0], az: -14, el: 10, fit: [60, 30] },
   },
 ];
 

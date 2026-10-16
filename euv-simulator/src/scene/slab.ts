@@ -598,12 +598,13 @@ export class SlabModule implements SimModule {
     for (const s of [this.A, this.B]) {
       s.group.rotation.y = -0.26;
       g.add(s.group);
-      reg.register('resist', s.resist.mesh, { priority: 1, emph: false, bounds: () => this.bounds() });
-      reg.register('etcher', s.film.mesh, { priority: 1, emph: false });
+      // in isolation the resist is shown with its whole magnified cross-section; the etch tool and wafer are not
+      reg.register('resist', s.resist.mesh, { priority: 1, emph: false, bounds: () => this.bounds(), isoRoot: s.group });
+      reg.register('etcher', s.film.mesh, { priority: 1, emph: false, isolate: false });
     }
     // silicon pieces count as the wafer
     for (const s of [this.A, this.B]) s.group.traverse((o) => {
-      if (o.userData.isSilicon) reg.register('wafer', o, { priority: 1, emph: false });
+      if (o.userData.isSilicon) reg.register('wafer', o, { priority: 1, emph: false, isolate: false });
     });
     const geo = new THREE.BufferGeometry();
     this.zoomPos = new THREE.BufferAttribute(new Float32Array(8 * 3), 3).setUsage(THREE.DynamicDrawUsage);
@@ -626,7 +627,9 @@ export class SlabModule implements SimModule {
   }
 
   update(c: FrameCtx) {
-    const t = slabTimes(c.stage, c.p);
+    // inspecting the resist before the cross-section appears shows it as it is at the end of the exposure
+    const t0 = slabTimes(c.stage, c.p);
+    const t = c.inspect === 'resist' && t0.vis < 0.5 ? slabTimes(7, 0.85) : t0;
     waferPose(c.T, this.pose);
     const compare = c.tone === 'compare';
     const model = buildResistModel(N, W, 3, c.dose);

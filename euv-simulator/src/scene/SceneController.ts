@@ -5,7 +5,10 @@ import { COMPONENTS } from '../data/components';
 import { LabelDef } from '../data/labels';
 import { SLAB, v3 } from '../data/layout';
 import { OVERVIEW, STAGES, stageProgress } from '../data/stages';
-import type { CamPreset } from '../data/types';
+import type { CamPreset, InspectPreset } from '../data/types';
+import { framingTargets, isSubsystem, isolationTargets } from '../data/hierarchy';
+import { CABINET_BY_ID, CasingModule } from './casing';
+import { SupportModule } from './support';
 import { sim } from '../store/sim';
 import { LabelLayer, Rect } from './labels';
 import { OpticsModule } from './optics';
@@ -20,6 +23,9 @@ import { WorldModule } from './world';
 import { DEG, clamp, easeInOut, easeOut, lerp } from './util';
 
 const FOV = 34;
+/** render layer used to draw only the inspected component */
+const ISO = 1;
+const PRESET_DIR: Record<Exclude<InspectPreset, 'default'>, [number, number]> = { front: [0, 4], side: [90, 4], top: [0, 88], iso: [42, 30] };
 const _ndc = new THREE.Vector2();
 const _box = new THREE.Box3();
 const _v = new THREE.Vector3();
@@ -87,6 +93,12 @@ export class SceneController {
   private obstacles: Rect[] = [];
   private obstacleT = 0;
   private snapLabels = false;
+  readonly casing: CasingModule;
+  private isoKey = '';
+  private isoObjs: THREE.Object3D[] = [];
+  private inspectCache: { key: string; preset: CamPreset } | null = null;
+  private lastInspect: string | null = null;
+  private returnPose: { pos: THREE.Vector3; target: THREE.Vector3; userMoved: boolean } | null = null;
 
   constructor(private host: HTMLElement) {
     this.canvas = document.createElement('canvas');
@@ -114,8 +126,14 @@ export class SceneController {
     this.wafer = new WaferModule(this.registry);
     this.slab = new SlabModule(this.registry);
     const tracks = new TracksModule(this.registry);
-    this.modules = [world, source, optics, this.wafer, this.slab, tracks];
+    const support = new SupportModule(this.registry);
+    this.casing = new CasingModule(this.registry);
+    this.modules = [world, source, optics, this.wafer, this.slab, tracks, support, this.casing];
     for (const m of this.modules) this.scene.add(m.group);
+    // lights must be on the isolation layer too, or an isolated component would render unlit
+    this.scene.traverse((o) => {
+      if ((o as THREE.Light).isLight) o.layers.enable(ISO);
+    });
 
     this.controls = new OrbitControls(this.camera, this.canvas);
     this.controls.enableDamping = true;
@@ -137,7 +155,7 @@ export class SceneController {
 
     this.labels = new LabelLayer(
       host,
-      (comp) => sim.select(comp),
+      (comp) => sim.inspect(comp),
       (comp) => {
         this.hoverId = comp;
         this.markDirty();
@@ -234,6 +252,11 @@ export class SceneController {
   // ───────── camera ─────────
   private currentPreset(): { key: string; preset: CamPreset } {
     const s = sim.state;
+    if (s.inspect) {
+      const key = `I:${s.inspect}:${s.camNonce}`;
+      if (this.inspectCache?.key !== key) this.inspectCache = { key, preset: this.inspectPreset(s.inspect, s.camPreset) };
+      return this.inspectCache;
+    }
     if (s.view === 'component' && s.focusId && COMPONENTS[s.focusId]) {
       const c = COMPONENTS[s.focusId];
       let preset = c.cam;
@@ -242,6 +265,99 @@ export class SceneController {
     }
     if (s.view === 'stage') return { key: `S:${s.stage}:${s.viewNonce}`, preset: STAGES[s.stage].cam };
     return { key: `M:${s.viewNonce}`, preset: OVERVIEW };
+  }
+
+  /**
+   * Camera framing for the inspection view: centred on what is isolated, at a distance that keeps its bounding
+   * sphere inside the free part of the canvas, so it never rotates out of view whatever its size.
+   */
+  private inspectPreset(id: string, which: InspectPreset): CamPreset {
+    const box = new THREE.Box3();
+    const tmp = new THREE.Box3();
+    for (const t of framingTargets(id)) {
+      const b = isSubsystem(id) || t === 'enclosure' ? this.registry.isoBox(t, tmp) : this.registry.box(t, tmp) ?? this.registry.isoBox(t, tmp);
+      if (b && !b.isEmpty()) box.union(b);
+    }
+    if (box.isEmpty()) box.setFromCenterAndSize(this.controls.target.clone(), new THREE.Vector3(4, 4, 4));
+    const c = box.getCenter(new THREE.Vector3());
+    const comp = COMPONENTS[id];
+    // a process (plasma, droplets, light) is framed with some of its surroundings in view
+    let r = Math.max(comp?.kind === 'process' ? 2.6 : 0.8, box.getSize(new THREE.Vector3()).length() / 2);
+    // the hardware shown around a process stays in frame too, while the process itself stays centred
+    if (comp?.kind === 'process')
+      for (const t of comp.context ?? []) {
+        const b = this.registry.box(t, tmp);
+        if (!b || b.isEmpty()) continue;
+        for (let k = 0; k < 8; k++) {
+          const p = new THREE.Vector3(k & 1 ? b.max.x : b.min.x, k & 2 ? b.max.y : b.min.y, k & 4 ? b.max.z : b.min.z);
+          r = Math.max(r, 0.9 * p.distanceTo(c));
+        }
+      }
+    let az = comp?.cam.az ?? -24;
+    let el = comp?.cam.el ?? 16;
+    if (which !== 'default') [az, el] = PRESET_DIR[which];
+    else if (comp?.inspectView) [az, el] = comp.inspectView;
+    else {
+      // default: a three-quarter view, a little above, so depth and surface detail read clearly
+      az = Math.abs(az) < 12 ? (az < 0 ? -26 : 26) : az;
+      el = Math.max(10, Math.min(28, el));
+    }
+    const d = 2 * r * 1.08;
+    return { t: [c.x, c.y, c.z], az, el, fit: [d, d] };
+  }
+
+  /** Draw only the isolated component (render layer ISO), or everything again when id is null. */
+  private applyIsolation(id: string | null) {
+    const key = id ?? '';
+    if (key === this.isoKey) return;
+    for (const o of this.isoObjs) o.traverse((x) => x.layers.disable(ISO));
+    this.isoObjs = [];
+    this.isoKey = key;
+    if (!id) {
+      this.camera.layers.set(0);
+      return;
+    }
+    const ids = id === 'enclosure' ? ['enclosure'] : isolationTargets(id);
+    // the EUV light is drawn by beam segments spread over several modules; they are marked userData.beam
+    if (ids.includes('euvBeam'))
+      this.scene.traverse((o) => {
+        if (o.userData.beam) {
+          o.traverse((x) => x.layers.enable(ISO));
+          this.isoObjs.push(o);
+        }
+      });
+    for (const t of ids) {
+      const e = this.registry.entries.get(t);
+      if (!e) continue;
+      for (const r of e.isoRoots) {
+        r.traverse((x) => x.layers.enable(ISO));
+        this.isoObjs.push(r);
+      }
+    }
+    this.camera.layers.set(ISO);
+  }
+
+  /** Orbit limits: the machine views keep the camera in front of the machine; inspection allows a full turn. */
+  private setInspectControls(on: boolean) {
+    const c = this.controls;
+    c.minAzimuthAngle = on ? -Infinity : -1.25;
+    c.maxAzimuthAngle = on ? Infinity : 1.25;
+    c.minPolarAngle = on ? 0.02 * Math.PI : 0.12 * Math.PI;
+    c.maxPolarAngle = on ? 0.98 * Math.PI : 0.92 * Math.PI;
+    c.minDistance = on ? 0.4 : 3;
+    c.maxDistance = on ? 220 : 120;
+  }
+
+  /** Which component ids may be picked right now. */
+  private pickFilter(): (id: string) => boolean {
+    const st = sim.state;
+    if (st.inspect === 'enclosure') return (id) => id.startsWith('cab-');
+    if (st.inspect) {
+      const set = new Set(isolationTargets(st.inspect));
+      return (id) => set.has(id);
+    }
+    if (this.casing.openness < 0.5) return (id) => id.startsWith('cab-');
+    return (id) => !id.startsWith('cab-') && id !== 'enclosure';
   }
 
   /** Centre of the magnified cross-section(s), computed from the wafer transport so it is valid before the slab is first drawn. */
@@ -297,16 +413,32 @@ export class SceneController {
     this.down = null;
     if (!d) return;
     if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6) return;
-    const id = this.registry.pick(this.ndc(e), this.camera);
     sim.dismissHint();
-    sim.select(id);
+    const st = sim.state;
+    const hit = this.registry.pickHit(this.ndc(e), this.camera, this.pickFilter());
+    if (!hit) {
+      if (!st.inspect) sim.select(null);
+      return;
+    }
+    if (hit.id.startsWith('cab-')) {
+      // a cabinet of the closed machine: open it and explore what that cabinet contains
+      if (st.inspect !== 'enclosure') sim.inspect(CABINET_BY_ID[hit.id].target);
+      return;
+    }
+    if (st.inspect === hit.id) return;
+    sim.inspect(hit.id);
   };
   private onMove = (e: PointerEvent) => {
-    if (e.buttons) return;
+    if (e.buttons) {
+      // dragging in the inspection view takes over from the automatic rotation
+      const d = this.down;
+      if (d && sim.state.inspect && sim.state.spin && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4) sim.setSpin(false);
+      return;
+    }
     const now = performance.now();
     if (now - this.lastHoverTest < 60) return;
     this.lastHoverTest = now;
-    const id = this.registry.pick(this.ndc(e), this.camera);
+    const id = this.registry.pick(this.ndc(e), this.camera, this.pickFilter());
     if (id !== this.hoverId) {
       this.hoverId = id;
       this.canvas.style.cursor = id ? 'pointer' : 'grab';
@@ -391,6 +523,43 @@ export class SceneController {
     this.snapLabels = false;
   }
 
+  /** Inspection/casing state for tests: what is drawn, how the camera is set up. */
+  debugInspect() {
+    return {
+      layerMask: this.camera.layers.mask,
+      casing: this.casing.openness,
+      autoRotate: this.controls.autoRotate,
+      autoRotateSpeed: this.controls.autoRotateSpeed,
+      tween: !!this.tween,
+      target: this.controls.target.toArray(),
+      distance: this.camera.position.distanceTo(this.controls.target),
+      azimuth: this.controls.getAzimuthalAngle(),
+      polar: this.controls.getPolarAngle(),
+      drawn: this.drawnComponents(),
+    };
+  }
+
+  /** Component ids with at least one mesh that is visible and on the camera's render layer. */
+  drawnComponents(): string[] {
+    const out: string[] = [];
+    const visibleDeep = (o: THREE.Object3D) => {
+      for (let p: THREE.Object3D | null = o; p; p = p.parent) if (!p.visible) return false;
+      return true;
+    };
+    for (const [id, e] of this.registry.entries) {
+      let hit = false;
+      for (const r of [...e.roots, ...e.isoRoots]) {
+        r.traverse((o) => {
+          if (hit || !(o as THREE.Mesh).isMesh) return;
+          if (o.layers.test(this.camera.layers) && visibleDeep(o)) hit = true;
+        });
+        if (hit) break;
+      }
+      if (hit) out.push(id);
+    }
+    return out;
+  }
+
   /** Render statistics and beam visibility (used by tests). */
   debugStats() {
     this.debugFrame();
@@ -435,6 +604,25 @@ export class SceneController {
     const st = sim.state;
     const T = sim.getTime();
 
+    // inspection mode: isolation, orbit limits, and remembering where the user was
+    if (st.inspect !== this.lastInspect) {
+      const entering = !this.lastInspect && !!st.inspect;
+      const leaving = !!this.lastInspect && !st.inspect;
+      if (entering) this.returnPose = { pos: this.camera.position.clone(), target: this.controls.target.clone(), userMoved: this.userMoved };
+      this.lastInspect = st.inspect;
+      this.applyIsolation(st.inspect);
+      this.setInspectControls(!!st.inspect);
+      if (leaving && this.returnPose) {
+        // Back: glide to exactly where the camera was before inspection started
+        const rp = this.returnPose;
+        this.presetKey = this.currentPreset().key;
+        this.tween = { t0: performance.now(), dur: 1300, fromPos: this.camera.position.clone(), fromTarget: this.controls.target.clone(), to: { pos: rp.pos, target: rp.target } };
+        this.userMoved = rp.userMoved;
+        this.returnPose = null;
+        this.markDirty(2200);
+      }
+    }
+
     // camera presets
     const { key, preset } = this.currentPreset();
     if (key !== this.presetKey) {
@@ -449,9 +637,14 @@ export class SceneController {
       this.markDirty(300);
     }
 
-    this.controls.update(); // dispatches 'change' (→ markDirty) while the camera is still gliding
+    // slow automatic rotation around the inspected component (paused while gliding and when the user takes over)
+    const spinning = !!st.inspect && st.spin && !this.tween;
+    this.controls.autoRotate = spinning;
+    this.controls.autoRotateSpeed = 1.0 * st.spinDir; // one turn per minute
+    this.controls.update(dt); // dispatches 'change' (→ markDirty) while the camera is still gliding
     this.frames++;
-    const needs = st.playing || tweening || nowMs < this.dirtyUntil || once;
+    const casingMoving = this.casing.openness > 0.001 && this.casing.openness < 0.999;
+    const needs = st.playing || tweening || spinning || casingMoving || nowMs < this.dirtyUntil || once;
     if (!needs) return;
 
     // frame context
@@ -465,6 +658,8 @@ export class SceneController {
       let target = focus.has(id) ? 1 : 0;
       if (this.hoverId === id) target = Math.max(target, 0.85);
       if (st.selectedId === id) target = Math.max(target, 0.6);
+      // in the inspection view the model keeps its own colours: only a faint tint on the selection, a clear one on hover
+      if (st.inspect) target = this.hoverId === id ? 0.7 : st.selectedId === id ? 0.18 : 0;
       const cur = this.emphT.get(id) ?? 0;
       const nv = cur + (target - cur) * k;
       this.emphT.set(id, nv);
@@ -485,6 +680,8 @@ export class SceneController {
       camera: this.camera,
       pulses: euvPulses(T),
       emph: (id) => this.emphT.get(id) ?? 0,
+      casingOpen: st.casing === 'open',
+      inspect: st.inspect,
     };
     for (const m of this.modules) m.update(ctx);
     this.renderer.render(this.scene, this.camera);
@@ -495,7 +692,8 @@ export class SceneController {
       width: this.width,
       height: this.height,
       dt,
-      enabled: st.labels,
+      enabled: st.labels && !st.inspect,
+      exterior: this.casing.openness < 0.5 && !st.inspect,
       view: st.view,
       focusId: st.focusId,
       stage,
@@ -508,7 +706,7 @@ export class SceneController {
       selectedComp: st.selectedId,
       obstacles: this.readObstacles(nowMs).concat(this.slabRect()),
     });
-    this.updateBracket(st.selectedId);
+    this.updateBracket(st.inspect ? null : st.selectedId);
   };
 
   /** How many labels fit: phones get a handful, and fewer still when a bottom sheet leaves only a thin strip of 3-D view. */

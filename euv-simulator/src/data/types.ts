@@ -3,7 +3,9 @@ export type ToneMode = 'positive' | 'negative' | 'compare';
 export type ViewMode = 'machine' | 'stage' | 'component';
 export type Level = 'beginner' | 'intermediate' | 'advanced';
 export type Atmosphere = 'vacuum' | 'air';
-export type PanelTab = 'inspect' | 'concepts' | 'quiz' | 'about';
+export type PanelTab = 'inspect' | 'explore' | 'concepts' | 'quiz' | 'about';
+export type CasingState = 'closed' | 'open';
+export type InspectPreset = 'default' | 'front' | 'side' | 'top' | 'iso';
 
 /** Camera pose described by what must stay visible, so it adapts to any aspect ratio. */
 export interface CamPreset {
@@ -26,10 +28,20 @@ export interface EquationDef {
 
 export type WidgetId = 'photon' | 'resolution' | 'resist' | 'multilayer' | 'mask' | 'beer' | 'transfer';
 
+export type SubsystemId = 'sys-source' | 'sys-illum' | 'sys-reticle' | 'sys-projection' | 'sys-wafer' | 'sys-support' | 'sys-down';
+
 export interface ComponentInfo {
   id: string;
   name: string;
   zone: Zone;
+  /** subsystem this component belongs to (explorer hierarchy, breadcrumbs, subsystem isolation) */
+  parent: SubsystemId;
+  /** 'part' = hardware; 'process' = something that happens (plasma, light, droplets): isolated together with `context` */
+  kind?: 'part' | 'process' | 'zone';
+  /** hardware shown alongside a process when it is isolated, so the process has something to happen in */
+  context?: string[];
+  /** construction, sub-parts, materials and neighbours: level 2 of the inspection explanations */
+  engineering: string;
   /** Primary stage index (0-based) where this component is the star. */
   stage: number;
   /** Stages (0-based, inclusive) during which the component is active, when it spans more than one. */
@@ -44,6 +56,8 @@ export interface ComponentInfo {
   see: string;
   deep: { notes: string[]; limits: string[]; equations?: EquationDef[] };
   cam: CamPreset;
+  /** default [azimuth, elevation] in the isolated inspection view, when the close-up angle does not suit it */
+  inspectView?: [number, number];
   widgets?: WidgetId[];
 }
 

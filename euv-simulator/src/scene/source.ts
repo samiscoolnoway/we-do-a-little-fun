@@ -330,6 +330,8 @@ export class SourceModule implements SimModule {
     plasmaPick.add(plasmaProxy);
     g.add(plasmaPick);
     reg.register('plasma', plasmaPick, { priority: 3, emph: false, bounds: () => new THREE.Box3(v3(F1.x - 0.9, F1.y - 0.9, -0.9), v3(F1.x + 0.9, F1.y + 0.9, 0.9)) });
+    // the glowing plasma itself is what an isolated view of the plasma must show
+    reg.register('plasma', this.plasmaGroup, { priority: 3, emph: false });
 
     // EUV beam proxy (collector → IF)
     const euvProxy = beamFrustum(v3(-7.5, 3), IF, 0.5, 0.08, 0xffffff, 0, 10);
@@ -540,7 +542,8 @@ export class SourceModule implements SimModule {
       const tm = lastMainTime(T);
       const tau = T - tm;
       const on = mainOnAt(tm);
-      const P = on ? plasmaEnv(tau) : 0;
+      // while the plasma is being inspected it is held at a steady glow instead of flashing
+      const P = c.inspect === 'plasma' ? 0.5 + 0.08 * Math.sin(T * 2.4) : on ? plasmaEnv(tau) : 0;
       const flicker = 0.9 + 0.2 * hash(Math.floor(T * 40));
       const Pf = P * flicker;
       const vis = Pf > 0.004;

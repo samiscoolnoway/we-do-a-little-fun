@@ -1,5 +1,6 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
-import type { Atmosphere, Level, PanelTab, ToneMode, ViewMode } from '../data/types';
+import type { Atmosphere, CasingState, InspectPreset, Level, PanelTab, ToneMode, ViewMode } from '../data/types';
+import { isInspectable, isSubsystem } from '../data/hierarchy';
 import { N_STAGES, STAGE_START, T_TOTAL, stageAt, stageProgress } from '../data/stages';
 
 export interface SimState {
@@ -23,10 +24,20 @@ export interface SimState {
   conceptOpen: string | null;
   hintVisible: boolean;
   webgl: 'pending' | 'ok' | 'failed';
+  /** outer machine enclosure: closed = exterior view, open = interior visible */
+  casing: CasingState;
+  /** component or subsystem shown in the isolated inspection view (null = normal machine view) */
+  inspect: string | null;
+  /** slow automatic rotation in inspection mode, and its direction */
+  spin: boolean;
+  spinDir: 1 | -1;
+  /** camera angle requested in inspection mode; camNonce changes on every request (also re-applies the same preset) */
+  camPreset: InspectPreset;
+  camNonce: number;
 }
 
 const initial: SimState = {
-  playing: true,
+  playing: false,
   speed: 1,
   stage: 0,
   finished: false,
@@ -46,9 +57,17 @@ const initial: SimState = {
   conceptOpen: null,
   hintVisible: true,
   webgl: 'pending',
+  casing: 'closed',
+  inspect: null,
+  spin: true,
+  spinDir: 1,
+  camPreset: 'default',
+  camNonce: 0,
 };
 
 let state: SimState = initial;
+/** where to go back to when inspection ends */
+let inspectReturn: { view: ViewMode; focusId: string | null; casing: CasingState } | null = null;
 let time = 0;
 const listeners = new Set<() => void>();
 const timeListeners = new Set<(t: number) => void>();
@@ -106,11 +125,12 @@ export const sim = {
     emitTime();
   },
   play() {
+    // the timeline shows the inside of the machine, so playing opens the enclosure
     if (state.finished || time >= T_TOTAL - 0.01) {
       time = 0;
-      set({ stage: 0, finished: false, playing: true });
+      set({ stage: 0, finished: false, playing: true, casing: 'open' });
       emitTime();
-    } else set({ playing: true });
+    } else set({ playing: true, casing: 'open' });
   },
   pause() {
     set({ playing: false });
@@ -120,12 +140,13 @@ export const sim = {
   },
   restart() {
     time = 0;
-    set({ stage: 0, finished: false, playing: true });
+    set({ stage: 0, finished: false, playing: true, casing: 'open' });
     emitTime();
   },
   goStage(i: number, opts?: { keepPlaying?: boolean }) {
     const k = Math.min(Math.max(i, 0), N_STAGES - 1);
     sim.setTime(STAGE_START[k] + 0.001);
+    set({ casing: 'open' });
     if (opts?.keepPlaying === false) set({ playing: false });
   },
   next() {
@@ -147,7 +168,7 @@ export const sim = {
     set({ path: !state.path });
   },
   setView(view: ViewMode) {
-    set({ view, focusId: view === 'component' ? state.focusId : null, viewNonce: state.viewNonce + 1 });
+    set({ view, focusId: view === 'component' ? state.focusId : null, viewNonce: state.viewNonce + 1, casing: view === 'machine' ? state.casing : 'open' });
   },
   setTone(tone: ToneMode) {
     set({ tone });
@@ -179,7 +200,56 @@ export const sim = {
     else set({ selectedId: id, panelOpen: true, panelTab: 'inspect', hintVisible: false });
   },
   focusComponent(id: string) {
-    set({ selectedId: id, view: 'component', focusId: id, viewNonce: state.viewNonce + 1, panelOpen: true, panelTab: 'inspect', hintVisible: false });
+    set({ selectedId: id, view: 'component', focusId: id, viewNonce: state.viewNonce + 1, panelOpen: true, panelTab: 'inspect', hintVisible: false, casing: 'open' });
+  },
+
+  // ── machine enclosure ──
+  openCasing() {
+    set({ casing: 'open', hintVisible: false });
+  },
+  /** Back to the complete machine exterior: ends any inspection and shows the whole machine. */
+  closeCasing() {
+    inspectReturn = null;
+    set({ inspect: null, selectedId: null, casing: 'closed', view: 'machine', focusId: null, viewNonce: state.viewNonce + 1 });
+  },
+  toggleCasing() {
+    state.casing === 'closed' ? sim.openCasing() : sim.closeCasing();
+  },
+
+  // ── isolated component inspection ──
+  /** Open the isolated inspection view for a component or subsystem; switching between items keeps the original return point. */
+  inspect(id: string) {
+    if (!isInspectable(id)) {
+      sim.select(id);
+      return;
+    }
+    if (!state.inspect) inspectReturn = { view: state.view, focusId: state.focusId, casing: state.casing };
+    set({
+      inspect: id,
+      selectedId: isSubsystem(id) ? null : id,
+      casing: id === 'enclosure' ? state.casing : 'open',
+      spin: true,
+      camPreset: 'default',
+      camNonce: state.camNonce + 1,
+      hintVisible: false,
+    });
+  },
+  /** Back: leave inspection and restore the machine view the user came from. */
+  exitInspect() {
+    if (!state.inspect) return;
+    const r = inspectReturn ?? { view: state.view, focusId: state.focusId, casing: state.casing };
+    inspectReturn = null;
+    set({ inspect: null, selectedId: null, view: r.view, focusId: r.focusId, casing: r.casing, viewNonce: state.viewNonce + 1 });
+  },
+  setSpin(spin: boolean) {
+    set({ spin });
+  },
+  reverseSpin() {
+    set({ spinDir: state.spinDir === 1 ? -1 : 1, spin: true });
+  },
+  /** Reset view and the Front/Side/Top/Isometric presets of the inspection camera. */
+  setCamPreset(camPreset: InspectPreset) {
+    set({ camPreset, camNonce: state.camNonce + 1 });
   },
   setConceptLevel(conceptLevel: Level) {
     set({ conceptLevel });

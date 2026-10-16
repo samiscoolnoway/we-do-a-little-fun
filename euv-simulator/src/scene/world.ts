@@ -53,11 +53,13 @@ export class WorldModule implements SimModule {
   update(c: FrameCtx) {
     const inScanner = STAGES[c.stage].inScanner;
     const k = 0.1;
+    // the zone frames explain the interior; on the closed machine they would just look like bounding boxes
+    const show = c.casingOpen ? 1 : 0;
     const se = this.scannerEdges.material as THREE.LineBasicMaterial;
     const de = this.downEdges.material as THREE.LineBasicMaterial;
-    se.opacity += ((inScanner ? 0.6 : 0.22) - se.opacity) * k;
-    de.opacity += ((inScanner ? 0.22 : 0.75) - de.opacity) * k;
-    (this.scannerFace.material as THREE.MeshPhysicalMaterial).opacity += ((inScanner ? 0.024 : 0.008) - (this.scannerFace.material as THREE.MeshPhysicalMaterial).opacity) * k;
-    (this.downFace.material as THREE.MeshPhysicalMaterial).opacity += ((inScanner ? 0.006 : 0.03) - (this.downFace.material as THREE.MeshPhysicalMaterial).opacity) * k;
+    se.opacity += ((inScanner ? 0.6 : 0.22) * show - se.opacity) * k;
+    de.opacity += ((inScanner ? 0.22 : 0.75) * show - de.opacity) * k;
+    (this.scannerFace.material as THREE.MeshPhysicalMaterial).opacity += ((inScanner ? 0.024 : 0.008) * show - (this.scannerFace.material as THREE.MeshPhysicalMaterial).opacity) * k;
+    (this.downFace.material as THREE.MeshPhysicalMaterial).opacity += ((inScanner ? 0.006 : 0.03) * show - (this.downFace.material as THREE.MeshPhysicalMaterial).opacity) * k;
   }
 }

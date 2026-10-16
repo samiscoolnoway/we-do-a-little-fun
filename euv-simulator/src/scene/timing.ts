@@ -19,6 +19,10 @@ export interface FrameCtx {
   camera: THREE.PerspectiveCamera;
   pulses: Pulse[];
   emph: (id: string) => number;
+  /** enclosure target state (the casing animates towards it) */
+  casingOpen: boolean;
+  /** id shown in the isolated inspection view, or null */
+  inspect: string | null;
 }
 
 export interface SimModule {

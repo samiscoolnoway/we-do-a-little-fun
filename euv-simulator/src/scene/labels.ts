@@ -35,6 +35,8 @@ export interface LabelUpdate {
   height: number;
   dt: number;
   enabled: boolean;
+  /** the casing is closed: only the exterior labels (cabinet names) are shown */
+  exterior?: boolean;
   view: ViewMode;
   focusId: string | null;
   stage: number;
@@ -139,6 +141,8 @@ export class LabelLayer {
   private wanted(it: Item, u: LabelUpdate, ctx: LabelCtx): boolean {
     if (!u.enabled) return false;
     const d = it.def;
+    if (!!d.exterior !== !!u.exterior) return false;
+    if (d.exterior) return true;
     if (d.show && !d.show(ctx)) return false;
     const inStage = STAGES[u.stage].labels.includes(d.id);
     if (u.view === 'machine') return u.width < 700 ? inStage : !!d.overview || inStage;
@@ -160,6 +164,8 @@ export class LabelLayer {
 
   update(u: LabelUpdate) {
     const ctx: LabelCtx = { tone: u.tone, stage: u.stage };
+    // switched off as a whole (inspection mode, labels toggled off): hidden at once, without waiting on fades
+    this.root.classList.toggle('is-off', !u.enabled);
     const scale = Math.min(1, Math.max(0.72, u.width / 1100));
     const margin = 10;
     const compact = u.view === 'machine';
@@ -206,6 +212,7 @@ export class LabelLayer {
         if (it.shown) {
           it.shown = false;
           it.el.classList.add('is-hidden');
+          it.el.classList.remove('is-dim', 'is-hot');
           it.line.style.opacity = '0';
           it.dot.style.opacity = '0';
         }

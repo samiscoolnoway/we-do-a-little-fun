@@ -233,7 +233,10 @@ export class OpticsModule implements SimModule {
     const stripe = new THREE.Mesh(new THREE.BoxGeometry(4.42, 0.06, 0.06), new THREE.MeshStandardMaterial({ color: 0x20243a, emissive: COLOR.mask, emissiveIntensity: 0.9 }));
     stripe.userData.noEmph = true;
     stripe.position.set(0, 0.62, 1.92);
-    this.reticleMove.add(chuck, carriage, stripe);
+    // the moving part of the reticle stage (clamp, carriage, stripe) is its own selectable component
+    const stageParts = new THREE.Group();
+    stageParts.add(chuck, carriage, stripe);
+    this.reticleMove.add(stageParts);
     // beam-spot slit (illuminated strip of the mask)
     this.slit = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.34).rotateX(Math.PI / 2), glowMat(COLOR.euv, 0));
     (this.slit.material as THREE.MeshBasicMaterial).side = THREE.DoubleSide;
@@ -242,11 +245,13 @@ export class OpticsModule implements SimModule {
     this.reticleMove.add(this.slit);
     reticle.add(this.reticleMove);
     // fixed guide rails along the scan direction
+    const rails = new THREE.Group();
     for (const x of [-2.3, 2.3]) {
       const r = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 6.2, 14).rotateX(Math.PI / 2), steel(0xaab5ca, 0.25, 1));
       r.position.set(x, 0.52, 0);
-      reticle.add(r);
+      rails.add(r);
     }
+    reticle.add(rails);
     // magnified pattern card
     const card = new THREE.Group();
     card.position.set(20.6 - rp.x, 15.3 - rp.y, 1.3);
@@ -262,7 +267,13 @@ export class OpticsModule implements SimModule {
     zoom.raycast = () => {};
     reticle.add(zoom);
     g.add(reticle);
-    reg.register('reticle', reticle, { priority: 1, bounds: () => new THREE.Box3(v3(rp.x - 2.4, rp.y - 0.3, -2), v3(rp.x + 2.4, rp.y + 1.0, 2)) });
+    const reticleBounds = () => new THREE.Box3(v3(rp.x - 2.4, rp.y - 0.3, -2), v3(rp.x + 2.4, rp.y + 1.0, 2));
+    reg.register('reticle', plate, { priority: 1, bounds: reticleBounds });
+    reg.register('reticle', card, { priority: 1 });
+    reg.register('reticle', zoom, { priority: 1 });
+    reg.register('reticle', this.slit, { priority: 1 });
+    reg.register('reticleStage', stageParts, { priority: 1, bounds: () => new THREE.Box3(v3(rp.x - 2.4, rp.y + 0.05, -3.2), v3(rp.x + 2.4, rp.y + 0.85, 3.2)) });
+    reg.register('reticleStage', rails, { priority: 1 });
 
     // ───────── projection optics ─────────
     const proj = new THREE.Group();
