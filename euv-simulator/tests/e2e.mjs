@@ -1214,7 +1214,7 @@ await test('typewriter: name at once, text types in order, pause / resume / skip
   assert(a.level === 'overview' && a.text.length < info.levels.overview.length, 'typing should start with the overview');
   // the text grows with time (polled: a software-rendered frame can take most of a second)
   let b = a;
-  for (let k = 0; k < 20 && b.text.length <= a.text.length; k++) {
+  for (let k = 0; k < 80 && b.text.length <= a.text.length; k++) {
     await sleep(250);
     b = await read();
   }
@@ -1241,7 +1241,8 @@ await test('typewriter: name at once, text types in order, pause / resume / skip
   assert(/paused/i.test(await S(() => document.querySelector('[data-testid=tw-status]').textContent)), 'status should say Paused');
   await click('[data-testid=tw-pause]');
   let p3 = p2;
-  for (let k = 0; k < 20 && p3 <= p2; k++) {
+  // up to 20 s: typing advances on animation frames, which a software renderer can withhold for many seconds
+  for (let k = 0; k < 80 && p3 <= p2; k++) {
     await sleep(250);
     p3 = (await read()).text.length;
   }
