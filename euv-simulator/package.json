@@ -1,0 +1,28 @@
+{
+  "name": "euv-simulator",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Interactive educational EUV lithography simulator (React + Three.js)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build && node scripts/make-standalone.mjs",
+    "preview": "vite preview --host 127.0.0.1 --port 4173",
+    "test:e2e": "node tests/e2e.mjs",
+    "test:standalone": "node tests/standalone.mjs"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/three": "^0.186.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "typescript": "~5.9.3",
+    "vite": "^6.4.0"
+  }
+}
