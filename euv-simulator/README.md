@@ -153,8 +153,13 @@ automatic advance, independence from the rotation, reduced motion).
 Limits you should know about:
 
 * The checks ran on **software-rendered WebGL** (SwiftShader, about 1–2 frames per second), so frame rate on
-  a real GPU has **not** been measured here. The per-frame JavaScript cost was measured at a few
-  milliseconds; the scene is roughly 70 k triangles and a few hundred draw calls.
+  a real GPU has **not** been measured here. Measured per-frame cost (JavaScript + draw submission): about
+  4–6 ms for the closed exterior (≈400 draw calls, 190 k triangles), 3–6 ms for the open interior (≈280 calls,
+  120 k triangles), 1–2 ms in the isolated view (8–120 calls). Forty inspect/Back cycles left the number of
+  textures unchanged; geometries rise once (386 → 416, meshes first built on demand) and then stay flat over repeated rounds.
+  In the software renderer the first frames after opening or closing the casing stall for seconds while it
+  builds pipelines for the new blend state; the shader variants are compiled at start-up to keep this short on
+  real GPUs, but that has not been verified on hardware.
 * Web fonts are blocked in the test browser, so the layout was verified with the fallback font stack.
 * Only Chromium was used. Other browsers and real touch devices were not tested.
 * The physics is a teaching approximation; nothing here has been validated against a real scanner.

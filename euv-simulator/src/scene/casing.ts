@@ -484,6 +484,22 @@ export class CasingModule implements SimModule {
       p.obj.position.copy(p.base).addScaledVector(p.dir, kk);
     }
     // fade: materials go transparent only while moving, so the closed casing renders opaque and sorts correctly
+    const mats = this.materials();
+    const fade = 1 - smoothstep(0.25, 0.95, k);
+    const moving = k > 0.001;
+    if (moving !== this.wasTransparent) {
+      for (const m of mats) {
+        if (m.userData.glass) continue;
+        m.transparent = moving;
+        m.depthWrite = !moving;
+        m.needsUpdate = true;
+      }
+      this.wasTransparent = moving;
+    }
+    for (const m of mats) m.opacity = (m.userData.baseOpacity ?? 1) * fade;
+  }
+
+  private materials(): THREE.Material[] {
     if (!this.mats) {
       const set = new Set<THREE.Material>();
       this.group.traverse((o) => {
@@ -493,18 +509,25 @@ export class CasingModule implements SimModule {
       this.mats = [...set];
       for (const m of this.mats) m.userData.baseOpacity = m.opacity;
     }
-    const fade = 1 - smoothstep(0.25, 0.95, k);
-    const moving = k > 0.001;
-    if (moving !== this.wasTransparent) {
-      for (const m of this.mats) {
-        if (m.userData.glass) continue;
-        m.transparent = moving;
-        m.depthWrite = !moving;
+    return this.mats;
+  }
+
+  /** Run `fn` with the casing in its see-through (moving) state, so that shader variant is compiled up front
+   *  instead of stalling the first frame of the opening animation. */
+  withTransparent(fn: () => void) {
+    const mats = this.materials().filter((m) => !m.userData.glass);
+    const set = (on: boolean) =>
+      mats.forEach((m) => {
+        m.transparent = on;
+        m.depthWrite = !on;
         m.needsUpdate = true;
-      }
-      this.wasTransparent = moving;
+      });
+    set(true);
+    try {
+      fn();
+    } finally {
+      set(this.wasTransparent);
     }
-    for (const m of this.mats) m.opacity = (m.userData.baseOpacity ?? 1) * fade;
   }
 
   /** finish a running open/close on the next frame (tests settle the scene this way) */

@@ -209,6 +209,7 @@ export class SceneController {
     });
     try {
       this.renderer.compile(this.scene, this.camera);
+      this.casing.withTransparent(() => this.renderer.compile(this.scene, this.camera));
     } catch (e) {
       console.warn('shader warm-up skipped', e);
     }
