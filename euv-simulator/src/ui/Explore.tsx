@@ -3,6 +3,7 @@ import { COMPONENTS } from '../data/components';
 import { SUBSYSTEMS, SUBSYSTEM_BY_ID, inspectInfo, type InspectInfo } from '../data/hierarchy';
 import type { InspectPreset } from '../data/types';
 import { sim, useSim } from '../store/sim';
+import { FinishedWaferButton } from './Chip';
 
 // ═══════════════════════════ helpers ═══════════════════════════
 function useReducedMotion() {
@@ -61,7 +62,7 @@ const readPause = (n: number) => Math.min(9000, 2500 + n * 12); // time to finis
  * levels never mixes text, and the whole component is remounted (key = id) when the inspected item changes,
  * which cancels any typing in progress.
  */
-function TypedLevels({ info }: { info: InspectInfo }) {
+export function TypedLevels({ info }: { info: Pick<InspectInfo, "levels"> }) {
   const reduced = useReducedMotion();
   const texts = LEVELS.map((l) => info.levels[l.key as LevelKey]);
   const [level, setLevel] = useState(0);
@@ -339,6 +340,10 @@ export function ExplorerView() {
         <button type="button" className="btn btn-sm btn-ghost" onClick={() => sim.inspect('enclosure')}>
           Inspect the casing
         </button>
+      </div>
+      <div className="explore-chip">
+        <FinishedWaferButton compact />
+        <span>Leave the machine and zoom into the finished wafer: dies, circuits, transistors and their layers.</span>
       </div>
       <ul className="tree" data-testid="explore-tree">
         {groups.map(({ s, kids }) => (

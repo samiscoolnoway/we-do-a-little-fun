@@ -133,8 +133,14 @@ export class LabelLayer {
     this.root.remove();
   }
 
+  /** Hide every label at once (another scene is on screen). */
+  off() {
+    this.root.classList.add('is-off');
+  }
+
   /** Number of labels currently shown (used by tests). */
   visibleIds(): string[] {
+    if (this.root.classList.contains('is-off')) return [];
     return this.items.filter((i) => i.shown).map((i) => i.def.id);
   }
 

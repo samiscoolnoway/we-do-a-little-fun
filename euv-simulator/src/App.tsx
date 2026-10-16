@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { sim, useSim } from './store/sim';
 import { Announcer, Fallback, Hint, StageCard, TopBar, ViewportFoot } from './ui/Chrome';
 import { ExteriorCard, InspectCard, IsoVeil } from './ui/Explore';
+import { ChipCard } from './ui/Chip';
 import { Dock } from './ui/Dock';
 import { Panel } from './ui/Panel';
 import { SimCanvas } from './ui/SimCanvas';
@@ -53,7 +54,8 @@ function useShortcuts() {
           sim.toggleCasing();
           break;
         case 'Escape':
-          if (sim.state.inspect) sim.exitInspect();
+          if (sim.state.chip) sim.chipUp();
+          else if (sim.state.inspect) sim.exitInspect();
           else if (sim.state.selectedId) sim.select(null);
           else sim.togglePanel(false);
           break;
@@ -69,16 +71,17 @@ export function App() {
   const webgl = useSim((s) => s.webgl);
   const inspecting = useSim((s) => !!s.inspect);
   const closed = useSim((s) => s.casing === 'closed');
+  const chip = useSim((s) => !!s.chip);
   const [tall, setTall] = useState(false);
   useShortcuts();
   return (
     <div className="app">
       <TopBar />
       <div className="main">
-        <div className={`viewport${inspecting ? ' is-inspecting' : ''}`} data-testid="viewport" data-casing={closed ? 'closed' : 'open'}>
+        <div className={`viewport${inspecting || chip ? ' is-inspecting' : ''}${chip ? ' is-chip' : ''}`} data-testid="viewport" data-casing={closed ? 'closed' : 'open'}>
           <SimCanvas />
           <IsoVeil />
-          {inspecting ? <InspectCard /> : closed ? <ExteriorCard /> : <StageCard />}
+          {chip ? <ChipCard /> : inspecting ? <InspectCard /> : closed ? <ExteriorCard /> : <StageCard />}
           <ViewportFoot />
           <Hint />
           {webgl === 'failed' && <Fallback />}

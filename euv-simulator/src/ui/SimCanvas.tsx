@@ -7,10 +7,11 @@ import { QUIZ } from '../data/quiz';
 import { STAGES, STAGE_START, T_TOTAL } from '../data/stages';
 import { sim } from '../store/sim';
 import { ORPHANS, SUBSYSTEMS, inspectInfo, isInspectable, isolationTargets } from '../data/hierarchy';
+import { CHIP_INFO, CHIP_MATS, DIES } from '../data/chip';
 
 declare global {
   interface Window {
-    __euv?: { sim: typeof sim; scene: SceneController | null; starts: number[]; durations: number[]; total: number; data: unknown; explore: unknown };
+    __euv?: { sim: typeof sim; scene: SceneController | null; starts: number[]; durations: number[]; total: number; data: unknown; explore: unknown; chip: unknown };
   }
 }
 
@@ -83,6 +84,7 @@ export function SimCanvas() {
       data: { STAGES, COMPONENT_LIST, LABELS: LABELS.map((l) => ({ id: l.id, comp: l.comp, kind: l.kind })), CONCEPTS: CONCEPTS.map((c) => c.id), QUIZ },
       // the component hierarchy, used by the tests of the exploration mode
       explore: { SUBSYSTEMS, ORPHANS, inspectInfo, isInspectable, isolationTargets },
+      chip: { CHIP_INFO, CHIP_MATS, full: DIES.filter((d) => d.full).length, partial: DIES.filter((d) => !d.full).length },
     };
     window.__euv = { sim, scene: ctl, ...meta };
     window.dispatchEvent(new Event('euv-ready'));

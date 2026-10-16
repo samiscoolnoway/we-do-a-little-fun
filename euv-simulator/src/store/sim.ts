@@ -1,5 +1,6 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
-import type { Atmosphere, CasingState, InspectPreset, Level, PanelTab, ToneMode, ViewMode } from '../data/types';
+import type { Atmosphere, CasingState, ChipLevel, ChipState, InspectPreset, Level, PanelTab, ToneMode, ViewMode } from '../data/types';
+import { DIES, FLOORPLAN, TRANSISTORS } from '../data/chip';
 import { isInspectable, isSubsystem } from '../data/hierarchy';
 import { N_STAGES, STAGES, STAGE_START, T_TOTAL, stageAt, stageProgress } from '../data/stages';
 
@@ -36,6 +37,8 @@ export interface SimState {
   /** camera angle requested in inspection mode; camNonce changes on every request (also re-applies the same preset) */
   camPreset: InspectPreset;
   camNonce: number;
+  /** finished wafer and chip explorer (null = the machine) */
+  chip: ChipState | null;
 }
 
 const initial: SimState = {
@@ -65,7 +68,26 @@ const initial: SimState = {
   spinDir: 1,
   camPreset: 'default',
   camNonce: 0,
+  chip: null,
 };
+
+/** scale levels from the outside in */
+export const CHIP_ORDER: ChipLevel[] = ['wafer', 'die', 'block', 'cell', 'transistor'];
+/** layers hidden by default at each level (the insulating fill would veil the dense region view) */
+const CHIP_HIDDEN: Record<ChipLevel, string[]> = { wafer: [], die: [], block: ['diel', 'top'], cell: ['pass'], transistor: [] };
+/** the circuit region opens slightly exploded so the cells show under the wiring; the transistor opens cut along its channel */
+const CHIP_EXPLODE: Record<ChipLevel, number> = { wafer: 0, die: 0, block: 0.55, cell: 0, transistor: 0 };
+const CHIP_SEL: Record<ChipLevel, string> = { wafer: 'wafer', die: 'die', block: 'block', cell: 'nand2', transistor: 'nfet' };
+/** a die near the centre of the wafer, selected when the explorer opens */
+const centreDie = () => DIES.filter((d) => d.full).sort((a, b) => Math.hypot(a.x, a.y) - Math.hypot(b.x, b.y))[0].i;
+function chipAt(level: ChipLevel, prev: ChipState | null, patch: Partial<ChipState> = {}): ChipState {
+  const base: ChipState = prev ?? { level, die: null, region: null, device: null, sel: null, selBox: null, view: 'top', explode: 0, hidden: [], iso: false, on: false, nonce: 0 };
+  const device = level === 'transistor' ? (patch.device ?? base.device ?? 'nA') : level === 'cell' ? null : base.device;
+  const sel = level === 'transistor' ? (TRANSISTORS.find((t) => t.id === device)?.info ?? 'nfet') : level === 'die' && base.die !== null && !DIES[base.die].full ? 'die-edge' : CHIP_SEL[level];
+  return { ...base, level, sel, selBox: null, view: level === 'transistor' ? 'channel' : 'top', explode: CHIP_EXPLODE[level], hidden: CHIP_HIDDEN[level], iso: false, on: false, device, ...patch };
+}
+/** where the explorer goes back to */
+let chipReturn: { view: ViewMode; focusId: string | null; casing: CasingState } | null = null;
 
 let state: SimState = initial;
 /**
@@ -158,6 +180,8 @@ export const sim = {
     emitTime();
   },
   goStage(i: number, opts?: { keepPlaying?: boolean }) {
+    // choosing a stage on the timeline returns from the chip explorer to the machine
+    if (state.chip) sim.exitChip();
     const k = Math.min(Math.max(i, 0), N_STAGES - 1);
     sim.setTime(STAGE_START[k] + 0.001);
     set({ casing: 'open' });
@@ -273,6 +297,106 @@ export const sim = {
   /** Reset view and the Front/Side/Top/Isometric presets of the inspection camera. */
   setCamPreset(camPreset: InspectPreset) {
     set({ camPreset, camNonce: state.camNonce + 1 });
+  },
+  // ── finished wafer and chip explorer ──
+  /** Leave the machine for the finished wafer (from the end of the process, or the explorer). */
+  openChip() {
+    if (state.chip) return;
+    if (state.inspect) sim.exitInspect();
+    chipReturn = { view: state.view, focusId: state.focusId, casing: state.casing };
+    set({ chip: chipAt('wafer', null, { die: centreDie(), sel: 'wafer' }), selectedId: null, playing: false, spin: true, camPreset: 'default', camNonce: state.camNonce + 1, hintVisible: false });
+  },
+  /** Back to the machine, as it was. */
+  exitChip() {
+    if (!state.chip) return;
+    const r = chipReturn ?? { view: state.view, focusId: state.focusId, casing: state.casing };
+    chipReturn = null;
+    set({ chip: null, view: r.view, focusId: r.focusId, casing: r.casing, viewNonce: state.viewNonce + 1, camPreset: 'default' });
+  },
+  /** Go to a scale level (deeper levels need their die / region / transistor). */
+  chipGo(level: ChipLevel, patch: Partial<ChipState> = {}) {
+    const c = state.chip;
+    if (!c) return;
+    set({ chip: chipAt(level, c, patch), camPreset: 'default', spin: true });
+  },
+  /** One scale up (from the wafer: back to the machine). */
+  chipUp() {
+    const c = state.chip;
+    if (!c) return;
+    const k = CHIP_ORDER.indexOf(c.level);
+    if (k === 0) sim.exitChip();
+    else sim.chipGo(CHIP_ORDER[k - 1], { device: c.level === 'transistor' ? null : c.device });
+  },
+  /** Select a structure at the current level (shows its explanation, highlights it). */
+  chipSelect(h: { sel: string; die?: number; region?: string; box?: number; device?: string } | null) {
+    const c = state.chip;
+    if (!c) return;
+    if (!h) {
+      set({ chip: { ...c, sel: CHIP_SEL[c.level], selBox: null, iso: false } });
+      return;
+    }
+    const patch: Partial<ChipState> = { sel: h.sel, selBox: h.box ?? null };
+    if (h.die !== undefined && (c.level === 'wafer' || (c.level === 'die' && h.die !== c.die))) patch.die = h.die;
+    if (c.level === 'die' && h.die !== undefined && h.die !== c.die) {
+      // a neighbouring die: move over to it
+      set({ chip: { ...c, ...patch, die: h.die, region: null, sel: DIES[h.die].full ? 'die' : 'die-edge' } });
+      return;
+    }
+    if (h.region !== undefined) patch.region = h.region;
+    // selecting one of the circuit-region structures isolates it (and shows its layer if it was hidden)
+    if (c.level === 'block') {
+      patch.iso = h.sel.startsWith('blk-') && h.box === undefined;
+      if (patch.iso && (h.sel === 'blk-power' || h.sel === 'blk-clock') && c.hidden.includes('top')) patch.hidden = c.hidden.filter((x) => x !== 'top');
+    }
+    if (c.level === 'cell') patch.device = h.sel === 'nfet' || h.sel === 'pfet' ? (h.device ?? null) : null;
+    if (c.level === 'cell' || c.level === 'transistor') patch.iso = false;
+    set({ chip: { ...c, ...patch } });
+  },
+  /** Zoom into the selected item: die → region → cell → transistor. Returns false when there is nothing deeper. */
+  chipDive(h?: { sel: string; die?: number; region?: string; box?: number; device?: string }) {
+    const c = state.chip;
+    if (!c) return false;
+    if (h) sim.chipSelect(h);
+    const s = state.chip!;
+    if (s.level === 'wafer' && s.die !== null && DIES[s.die].full) {
+      sim.chipGo('die', { sel: 'die' });
+      return true;
+    }
+    if (s.level === 'die') {
+      const r = FLOORPLAN.find((f) => f.id === s.region);
+      if (r && (r.kind === 'logic' || r.kind === 'sram')) {
+        sim.chipGo('block', { region: r.id });
+        return true;
+      }
+      return false;
+    }
+    if (s.level === 'block' && (s.sel === 'std-cell' || s.sel === 'blk-cells')) {
+      sim.chipGo('cell');
+      return true;
+    }
+    if (s.level === 'cell') {
+      const dev = s.device ?? (h?.device || null);
+      if (dev) {
+        sim.chipGo('transistor', { device: dev });
+        return true;
+      }
+    }
+    return false;
+  },
+  chipSet(patch: Partial<Pick<ChipState, 'view' | 'explode' | 'iso' | 'on' | 'hidden'>>) {
+    const c = state.chip;
+    if (!c) return;
+    set({ chip: { ...c, ...patch } });
+  },
+  chipToggleLayer(id: string) {
+    const c = state.chip;
+    if (!c) return;
+    set({ chip: { ...c, hidden: c.hidden.includes(id) ? c.hidden.filter((x) => x !== id) : [...c.hidden, id] } });
+  },
+  chipReset() {
+    const c = state.chip;
+    if (!c) return;
+    set({ chip: { ...c, nonce: c.nonce + 1 }, camPreset: 'default', camNonce: state.camNonce + 1 });
   },
   setConceptLevel(conceptLevel: Level) {
     set({ conceptLevel });

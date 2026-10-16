@@ -5,11 +5,12 @@ import { COMPONENTS } from '../data/components';
 import { LabelDef } from '../data/labels';
 import { SLAB, v3 } from '../data/layout';
 import { EXTERIOR, OVERVIEW, STAGES, stageProgress } from '../data/stages';
-import type { CamPreset, InspectPreset } from '../data/types';
+import type { CamPreset, ChipLevel, ChipState, InspectPreset } from '../data/types';
+import { ChipModule, reprOf, type ChipHit, type Repr } from './chip/chipModule';
 import { framingTargets, isSubsystem, isolationTargets } from '../data/hierarchy';
 import { CABINET_BY_ID, CasingModule } from './casing';
 import { SupportModule } from './support';
-import { sim } from '../store/sim';
+import { CHIP_ORDER, sim, type SimState } from '../store/sim';
 import { LabelLayer, Rect } from './labels';
 import { OpticsModule } from './optics';
 import { Registry } from './registry';
@@ -79,7 +80,7 @@ export class SceneController {
   private height = 1;
   private ro: ResizeObserver;
   private dirtyUntil = 0;
-  private tween: { t0: number; dur: number; fromPos: THREE.Vector3; fromTarget: THREE.Vector3; to: Pose } | null = null;
+  private tween: { t0: number; dur: number; fromPos: THREE.Vector3; fromTarget: THREE.Vector3; to: Pose; onDone?: () => void } | null = null;
   private presetKey = '';
   private userMoved = false;
   frames = 0;
@@ -99,6 +100,21 @@ export class SceneController {
   private inspectCache: { key: string; preset: CamPreset } | null = null;
   private lastInspect: string | null = null;
   private returnPose: { pos: THREE.Vector3; target: THREE.Vector3; userMoved: boolean } | null = null;
+  // ── finished wafer / chip explorer ──
+  private chip: ChipModule | null = null;
+  /** the chip scene is the one being drawn */
+  private chipActive = false;
+  /** level and state last brought on screen */
+  private chipLevel: ChipLevel | null = null;
+  private chipState: ChipState | null = null;
+  private chipReturn: { pos: THREE.Vector3; target: THREE.Vector3; userMoved: boolean } | null = null;
+  /** the circuit-region cell that was dived into (the way back up lands on it) */
+  private chipDiveCell: number | null = null;
+  private chipHover: ChipHit | null = null;
+  private veil: HTMLDivElement;
+  private scaleT = 0;
+  private wheelIn = 0;
+  private wheelOut = 0;
 
   constructor(private host: HTMLElement) {
     this.canvas = document.createElement('canvas');
@@ -171,6 +187,12 @@ export class SceneController {
       },
     );
 
+    this.veil = document.createElement('div');
+    this.veil.className = 'chip-veil';
+    this.veil.setAttribute('aria-hidden', 'true');
+    host.appendChild(this.veil);
+    this.canvas.addEventListener('wheel', this.onWheel, { passive: true });
+    this.canvas.addEventListener('dblclick', this.onDbl);
     this.canvas.addEventListener('pointerdown', this.onDown);
     this.canvas.addEventListener('pointerup', this.onUp);
     this.canvas.addEventListener('pointermove', this.onMove);
@@ -223,6 +245,8 @@ export class SceneController {
     this.unsub.forEach((u) => u());
     this.ro.disconnect();
     this.labels.dispose();
+    this.chip?.dispose();
+    this.veil.remove();
     this.controls.dispose();
     this.renderer.dispose();
     this.canvas.remove();
@@ -249,7 +273,7 @@ export class SceneController {
     if (Math.abs(i.l - o.l) + Math.abs(i.r - o.r) + Math.abs(i.t - o.t) + Math.abs(i.b - o.b) < 6) return;
     this.insets = i;
     this.applyView();
-    if (this.frames > 0 && !this.userMoved) this.startTween(this.currentPreset().preset);
+    if (this.frames > 0 && !this.userMoved && !this.tween?.onDone) this.startTween(this.activePreset().preset);
     this.markDirty(2000);
   }
 
@@ -381,8 +405,16 @@ export class SceneController {
     return waferPose(sim.getTime()).slabX;
   }
 
+  /** the framing in force: the chip explorer's when it is open, else the machine's */
+  private activePreset(): { key: string; preset: CamPreset } {
+    const s = sim.state;
+    if (s.chip && this.chipActive && this.chip) return { key: this.chipKey(s), preset: this.chipPreset(s) };
+    return this.currentPreset();
+  }
+
   private snapToPreset(initial: boolean) {
-    const { key, preset } = this.currentPreset();
+    if (this.tween?.onDone) return;
+    const { key, preset } = this.activePreset();
     this.presetKey = key;
     const pose = poseFor(preset, this.width, this.height, this.insets);
     this.camera.position.copy(pose.pos);
@@ -423,7 +455,204 @@ export class SceneController {
     const s = new THREE.Spherical(Math.exp(lerp(Math.log(s0.radius), Math.log(s1.radius), k)), lerp(s0.phi, s1.phi, k), s0.theta + dTheta * k);
     this.camera.position.copy(target).add(_v.setFromSpherical(s));
     this.controls.target.copy(target);
-    if (k >= 1) this.tween = null;
+    if (k >= 1) {
+      const cb = tw.onDone;
+      this.tween = null;
+      cb?.();
+    }
+  }
+
+  private tweenTo(to: Pose, dur: number, onDone?: () => void) {
+    this.tween = { t0: performance.now(), dur, fromPos: this.camera.position.clone(), fromTarget: this.controls.target.clone(), to, onDone };
+    this.markDirty(dur + 600);
+  }
+
+  private snapTo(p: Pose) {
+    this.camera.position.copy(p.pos);
+    this.controls.target.copy(p.target);
+    this.stopMomentum();
+  }
+
+  // ───────── finished wafer / chip explorer ─────────
+  private chipKey(s: SimState): string {
+    const c = s.chip!;
+    return `K:${c.level}:${c.die}:${c.region}:${c.device}:${c.view}:${Math.round(c.explode * 2)}:${c.nonce}:${s.camPreset}:${s.camNonce}`;
+  }
+
+  private chipPreset(s: SimState): CamPreset {
+    const p = this.chip!.preset(s.chip!, 'final');
+    if (s.camPreset !== 'default') {
+      const [az, el] = PRESET_DIR[s.camPreset];
+      return { ...p, az, el };
+    }
+    return p;
+  }
+
+  /** zoom limits around the framing distance, so the model can be examined but never passed through or lost */
+  private setChipLimits(p: Pose | null) {
+    const c = this.controls;
+    if (!p) {
+      c.minDistance = 1e-4;
+      c.maxDistance = 1e7;
+      return;
+    }
+    const d = p.pos.distanceTo(p.target);
+    c.minDistance = d * 0.14;
+    c.maxDistance = d * 2.6;
+  }
+
+  private chipFinal(dur: number) {
+    const s = sim.state;
+    if (!s.chip) return;
+    this.presetKey = this.chipKey(s);
+    const to = poseFor(this.chipPreset(s), this.width, this.height, this.insets);
+    this.setChipLimits(null);
+    this.tweenTo(to, dur, () => this.setChipLimits(to));
+    this.userMoved = false;
+  }
+
+  private flashVeil() {
+    this.veil.classList.remove('go');
+    void this.veil.offsetWidth;
+    this.veil.classList.add('go');
+  }
+
+  /** Bring a representation on screen with the camera starting at `start`, then glide to the final framing. */
+  private chipSwitch(start: 'far' | 'close', item: { region?: string | null; cell?: number | null }) {
+    const s = sim.state.chip;
+    if (!s || !this.chip) return;
+    this.chipActive = true;
+    this.chip.setLabelsVisible(true);
+    this.chip.setRepr(reprOf(s.level));
+    this.chip.apply(s);
+    this.chipLevel = s.level;
+    this.chipState = s;
+    this.flashVeil();
+    this.snapTo(poseFor(this.chip.preset(s, start, item), this.width, this.height, this.insets));
+    this.chipFinal(1100);
+  }
+
+  /** Orchestrates entering, leaving and moving between scales of the chip explorer. */
+  private chipStep(st: SimState) {
+    const c = st.chip;
+    if (c && !this.chip) this.chip = new ChipModule(this.host, this.scene.environment!, (h) => sim.chipSelect(h));
+    const chip = this.chip;
+    if (!chip) return;
+    if (c && this.chipLevel === null && !this.chipActive) {
+      // enter: glide down onto the finished wafer in the machine, then cross over to the wafer model
+      this.chipReturn = { pos: this.camera.position.clone(), target: this.controls.target.clone(), userMoved: this.userMoved };
+      this.chipLevel = c.level;
+      this.chipState = c;
+      this.setChipLimits(null);
+      this.setInspectControls(true);
+      const wb = this.registry.box('wafer', new THREE.Box3());
+      const centre = wb && !wb.isEmpty() ? wb.getCenter(new THREE.Vector3()) : this.controls.target.clone();
+      this.presetKey = 'chip:enter';
+      this.tweenTo(poseFor({ t: [centre.x, centre.y, centre.z], az: 0, el: 72, fit: [2.6, 2.6] }, this.width, this.height, this.insets), 900, () => this.chipSwitch('far', {}));
+      return;
+    }
+    if (!c && this.chipLevel !== null) {
+      // leave: pull back from the model, cross over to the machine, glide back to where the user was
+      const prev = this.chipState!;
+      this.chipLevel = null;
+      this.chipState = null;
+      this.presetKey = 'chip:leave';
+      const done = () => {
+        this.chipActive = false;
+        chip.setLabelsVisible(false);
+        this.flashVeil();
+        this.setInspectControls(false);
+        this.camera.near = 0.5;
+        this.camera.far = 600;
+        this.camera.updateProjectionMatrix();
+        const wb = this.registry.box('wafer', new THREE.Box3());
+        const centre = wb && !wb.isEmpty() ? wb.getCenter(new THREE.Vector3()) : this.controls.target.clone();
+        this.snapTo(poseFor({ t: [centre.x, centre.y, centre.z], az: 0, el: 72, fit: [2.6, 2.6] }, this.width, this.height, this.insets));
+        const rp = this.chipReturn;
+        this.chipReturn = null;
+        const cur = this.currentPreset();
+        this.presetKey = cur.key;
+        const to = rp?.userMoved ? { pos: rp.pos, target: rp.target } : poseFor(cur.preset, this.width, this.height, this.insets);
+        this.tweenTo(to, 1300);
+        this.userMoved = !!rp?.userMoved;
+      };
+      if (this.chipActive) this.tweenTo(poseFor(chip.preset(prev, 'far'), this.width, this.height, this.insets), 650, done);
+      else done();
+      return;
+    }
+    if (!c) return;
+    if (!this.chipActive) return; // the entry glide is still running; chipSwitch picks up the newest state
+    if (c.level !== this.chipLevel) {
+      const from = this.chipState!;
+      const fromLevel = this.chipLevel!;
+      const oldR: Repr = reprOf(fromLevel);
+      const newR: Repr = reprOf(c.level);
+      const deeper = CHIP_ORDER.indexOf(c.level) > CHIP_ORDER.indexOf(fromLevel);
+      if (oldR === newR) {
+        this.chipLevel = c.level;
+        this.chipState = c;
+        chip.apply(c);
+        this.chipFinal(1000);
+        return;
+      }
+      this.presetKey = 'chip:transition';
+      if (deeper) {
+        // dive: down onto the item in this representation, then out of the distance in the enlarged one
+        if (fromLevel === 'block') this.chipDiveCell = chip.diveItem(from).cell ?? null;
+        const item = { region: c.region, cell: this.chipDiveCell };
+        this.setChipLimits(null);
+        this.tweenTo(poseFor(chip.preset(from, 'close', item), this.width, this.height, this.insets), 750, () => this.chipSwitch('far', item));
+      } else {
+        // rise: back out of this representation, then down onto the same spot in the larger one
+        const item = { region: c.region ?? from.region, cell: this.chipDiveCell };
+        this.setChipLimits(null);
+        this.tweenTo(poseFor(chip.preset(from, 'far'), this.width, this.height, this.insets), 650, () => this.chipSwitch('close', item));
+      }
+      this.chipLevel = c.level;
+      return;
+    }
+    if (c !== this.chipState && !this.tween?.onDone) {
+      this.chipState = c;
+      chip.apply(c);
+    }
+    if (!this.tween?.onDone) {
+      const key = this.chipKey(st);
+      if (key !== this.presetKey) this.chipFinal(900);
+    }
+  }
+
+  private onWheel = (e: WheelEvent) => {
+    if (!sim.state.chip || !this.chipActive || this.tween?.onDone) return;
+    // scrolling on past the zoom limit continues into the next scale (under the cursor) or back out to the previous one
+    const d = this.camera.position.distanceTo(this.controls.target);
+    if (e.deltaY < 0 && d <= this.controls.minDistance * 1.12) {
+      this.wheelOut = 0;
+      if (++this.wheelIn >= 3) {
+        this.wheelIn = 0;
+        const hit = this.chip!.pick(this.ndcXY(e.clientX, e.clientY), this.camera);
+        if (!sim.chipDive(hit ?? undefined)) sim.chipDive();
+      }
+    } else if (e.deltaY > 0 && d >= this.controls.maxDistance * 0.9) {
+      this.wheelIn = 0;
+      if (++this.wheelOut >= 3) {
+        this.wheelOut = 0;
+        sim.chipUp();
+      }
+    } else {
+      this.wheelIn = 0;
+      this.wheelOut = 0;
+    }
+  };
+
+  private onDbl = (e: MouseEvent) => {
+    if (!sim.state.chip || !this.chipActive) return;
+    const hit = this.chip!.pick(this.ndcXY(e.clientX, e.clientY), this.camera);
+    if (hit) sim.chipDive(hit);
+  };
+
+  private ndcXY(x: number, y: number) {
+    const r = this.canvas.getBoundingClientRect();
+    return new THREE.Vector2(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
   }
 
   // ───────── pointer interaction ─────────
@@ -441,6 +670,10 @@ export class SceneController {
     if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 6) return;
     sim.dismissHint();
     const st = sim.state;
+    if (st.chip || this.chipActive) {
+      if (st.chip && this.chipActive && this.chip && !this.tween?.onDone) sim.chipSelect(this.chip.pick(this.ndc(e), this.camera));
+      return;
+    }
     const hit = this.registry.pickHit(this.ndc(e), this.camera, this.pickFilter());
     if (!hit) {
       if (!st.inspect) sim.select(null);
@@ -458,12 +691,23 @@ export class SceneController {
     if (e.buttons) {
       // dragging in the inspection view takes over from the automatic rotation
       const d = this.down;
-      if (d && sim.state.inspect && sim.state.spin && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4) sim.setSpin(false);
+      if (d && (sim.state.inspect || sim.state.chip) && sim.state.spin && Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4) sim.setSpin(false);
       return;
     }
     const now = performance.now();
     if (now - this.lastHoverTest < 60) return;
     this.lastHoverTest = now;
+    if (sim.state.chip || this.chipActive) {
+      if (!this.chip || !this.chipActive) return;
+      const h = this.tween?.onDone ? null : this.chip.pick(this.ndc(e), this.camera);
+      if (JSON.stringify(h) !== JSON.stringify(this.chipHover)) {
+        this.chipHover = h;
+        this.chip.setHover(h);
+        this.canvas.style.cursor = h ? 'pointer' : 'grab';
+        this.markDirty();
+      }
+      return;
+    }
     const id = this.registry.pick(this.ndc(e), this.camera, this.pickFilter());
     if (id !== this.hoverId) {
       this.hoverId = id;
@@ -544,8 +788,12 @@ export class SceneController {
     this.casing.snapNext = true;
     this.obstacleT = 0; // re-measure the overlay cards now
     this.debugFrame(); // notices a changed preset and starts the glide
-    if (this.tween) this.tween.t0 = performance.now() - this.tween.dur - 1;
-    this.debugFrame(); // lands the camera
+    // lands the camera (several times: a scale change is a chain of glides)
+    for (let k = 0; k < 5 && this.tween; k++) {
+      this.tween.t0 = performance.now() - this.tween.dur - 1;
+      this.debugFrame();
+    }
+    this.debugFrame();
     this.snapLabels = true;
     this.debugFrame();
     this.snapLabels = false;
@@ -632,8 +880,12 @@ export class SceneController {
     const st = sim.state;
     const T = sim.getTime();
 
+    // finished wafer / chip explorer: its own scene, camera framing and transitions
+    const inChip = !!st.chip || this.chipLevel !== null || this.chipActive;
+    if (inChip) this.chipStep(st);
+
     // inspection mode: isolation, orbit limits, and remembering where the user was
-    if (st.inspect !== this.lastInspect) {
+    if (!inChip && st.inspect !== this.lastInspect) {
       const entering = !this.lastInspect && !!st.inspect;
       const leaving = !!this.lastInspect && !st.inspect;
       if (entering) this.returnPose = { pos: this.camera.position.clone(), target: this.controls.target.clone(), userMoved: this.userMoved };
@@ -656,7 +908,7 @@ export class SceneController {
 
     // camera presets
     const { key, preset } = this.currentPreset();
-    if (key !== this.presetKey) {
+    if (!inChip && key !== this.presetKey) {
       this.presetKey = key;
       if (this.frames === 0) this.snapToPreset(true);
       else this.startTween(preset);
@@ -669,14 +921,19 @@ export class SceneController {
     }
 
     // slow automatic rotation around the inspected component (paused while gliding and when the user takes over)
-    const spinning = !!st.inspect && st.spin && !this.tween;
+    const chipSpin = !!st.chip && this.chipActive && (st.chip.level === 'wafer' || st.chip.level === 'transistor');
+    const spinning = (!!st.inspect || chipSpin) && st.spin && !this.tween;
     this.controls.autoRotate = spinning;
     this.controls.autoRotateSpeed = 1.0 * st.spinDir; // one turn per minute
     this.controls.update(dt); // dispatches 'change' (→ markDirty) while the camera is still gliding
     this.frames++;
     const casingMoving = this.casing.openness > 0.001 && this.casing.openness < 0.999;
-    const needs = st.playing || tweening || spinning || casingMoving || nowMs < this.dirtyUntil || once;
+    const needs = st.playing || tweening || spinning || casingMoving || nowMs < this.dirtyUntil || once || (this.chipActive && !!st.chip?.on);
     if (!needs) return;
+    if (this.chipActive && this.chip) {
+      this.renderChip(dt, nowMs);
+      return;
+    }
 
     // frame context
     const stage = st.stage;
@@ -739,6 +996,57 @@ export class SceneController {
     });
     this.updateBracket(st.inspect ? null : st.selectedId);
   };
+
+  private renderChip(dt: number, now: number) {
+    const chip = this.chip!;
+    // near/far follow the distance: the same camera looks at millimetres, then nanometres
+    const d = this.camera.position.distanceTo(this.controls.target);
+    const near = Math.max(d / 400, 1e-5);
+    if (Math.abs(this.camera.near - near) / near > 0.15) {
+      this.camera.near = near;
+      this.camera.far = d * 60 + 50;
+      this.camera.updateProjectionMatrix();
+    }
+    chip.update(dt, this.camera, this.width, this.height);
+    this.renderer.render(chip.scene, this.camera);
+    this.labels.off();
+    this.updateBracket(null);
+    if (now - this.scaleT > 250) {
+      this.scaleT = now;
+      window.dispatchEvent(new CustomEvent('euv-chip-scale', { detail: chip.scale(this.camera, this.controls.target, this.width, this.height) }));
+    }
+  }
+
+  /** Chip explorer state for tests. */
+  debugChip() {
+    const c = this.controls;
+    return {
+      active: this.chipActive,
+      level: this.chipLevel,
+      tweening: !!this.tween,
+      dist: this.camera.position.distanceTo(c.target),
+      minDist: c.minDistance,
+      maxDist: c.maxDistance,
+      autoRotate: c.autoRotate,
+      near: this.camera.near,
+      labels: this.chip?.visibleLabels() ?? [],
+      calls: this.renderer.info.render.calls,
+      ...(this.chip?.debug() ?? {}),
+    };
+  }
+
+  /** A canvas point (CSS px, relative to the canvas) that picks a chip structure matching `spec`, not covered by any overlay. */
+  findChipPoint(spec: { sel?: string; region?: string; die?: number; device?: string }) {
+    if (!this.chip) return null;
+    const r = this.canvas.getBoundingClientRect();
+    return this.chip.findPoint(this.camera, this.width, this.height, (h) => {
+      if (spec.sel && h.sel !== spec.sel) return false;
+      if (spec.region && h.region !== spec.region) return false;
+      if (spec.die !== undefined && h.die !== spec.die) return false;
+      if (spec.device && h.device !== spec.device) return false;
+      return true;
+    }, (x, y) => document.elementFromPoint(r.left + x, r.top + y) === this.canvas);
+  }
 
   /** How many labels fit: phones get a handful, and fewer still when a bottom sheet leaves only a thin strip of 3-D view. */
   private maxLabels(): number {

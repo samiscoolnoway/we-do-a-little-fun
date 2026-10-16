@@ -5,6 +5,7 @@ import { sim, useSim } from '../store/sim';
 import { ZONE_COLOR } from './controls';
 import { IconChevron, IconFlask, IconPanel, Logo } from './icons';
 import { InspectToolbar } from './Explore';
+import { ChipToolbar, FinishedWaferButton } from './Chip';
 
 export function TopBar() {
   const stage = useSim((s) => s.stage);
@@ -12,8 +13,9 @@ export function TopBar() {
   const open = useSim((s) => s.panelOpen);
   const closed = useSim((s) => s.casing === 'closed');
   const inspect = useSim((s) => s.inspect);
+  const chip = useSim((s) => !!s.chip);
   const st = STAGES[stage];
-  const badge = inspect ? 'Isolated inspection' : closed ? 'Machine exterior' : st.inScanner ? 'Inside the EUV scanner' : st.zone === 'etch' ? 'Outside the scanner · etch tool' : 'Outside the scanner · track';
+  const badge = chip ? 'Finished wafer · chip explorer' : inspect ? 'Isolated inspection' : closed ? 'Machine exterior' : st.inScanner ? 'Inside the EUV scanner' : st.zone === 'etch' ? 'Outside the scanner · etch tool' : 'Outside the scanner · track';
   return (
     <header className="topbar" data-testid="topbar">
       <div className="brand">
@@ -94,6 +96,12 @@ export function StageCard() {
           {tone === 'negative' ? 'dark = cross-linked, stays after development' : tone === 'compare' ? 'left positive: pale = soluble · right negative: dark = hardened' : 'pale = soluble, dissolves in the developer'}
         </p>
       )}
+      {stage === STAGES.length - 1 && (
+        <div className="finish-row">
+          <FinishedWaferButton />
+          <span>The wafer is finished: zoom from the whole wafer down to a single transistor.</span>
+        </div>
+      )}
       <div className="stage-where" aria-label="Inspect parts of this stage">
         {st.focus
           .filter((id) => COMPONENTS[id])
@@ -119,10 +127,11 @@ const KEY_ITEMS: [string, string][] = [
 
 export function ViewportFoot() {
   const inspect = useSim((s) => s.inspect);
+  const chip = useSim((s) => !!s.chip);
   return (
     <div className="viewport-foot">
-      <InspectToolbar />
-      <div className="keys" aria-label="Colour key" hidden={!!inspect}>
+      {chip ? <ChipToolbar /> : <InspectToolbar />}
+      <div className="keys" aria-label="Colour key" hidden={!!inspect || chip}>
         {KEY_ITEMS.map(([c, n]) => (
           <span className="key" key={n} style={{ ['--k' as string]: c }}>
             <i />
@@ -140,11 +149,12 @@ export function ViewportFoot() {
 export function Hint() {
   const visible = useSim((s) => s.hintVisible);
   const closed = useSim((s) => s.casing === 'closed');
+  const chip = useSim((s) => !!s.chip);
   useEffect(() => {
     const t = window.setTimeout(() => sim.dismissHint(), 14000);
     return () => window.clearTimeout(t);
   }, []);
-  if (!visible) return null;
+  if (!visible || chip) return null;
   return (
     <div className="hint" role="note" data-testid="hint">
       <span className="hint-long">{closed ? 'Click a cabinet to explore what is inside · drag to orbit · scroll to zoom' : 'Drag to orbit · scroll to zoom · click any part or floating label to inspect it'}</span>

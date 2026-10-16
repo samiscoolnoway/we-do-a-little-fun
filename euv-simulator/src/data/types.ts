@@ -101,3 +101,33 @@ export interface QuizQ {
   why: string;
   stage: number;
 }
+
+// ── finished wafer + chip explorer ──
+/** Scale level of the chip explorer: physical wafer and die, then enlarged educational models of a circuit region, a cell and one transistor. */
+export type ChipLevel = 'wafer' | 'die' | 'block' | 'cell' | 'transistor';
+/** Top-down layout view, or a cut along the transistor channel, or a cut across the gate. */
+export type ChipView = 'top' | 'channel' | 'gate';
+export interface ChipState {
+  level: ChipLevel;
+  /** selected die (index into DIES) */
+  die: number | null;
+  /** floorplan region of the die that was opened (FLOORPLAN id) */
+  region: string | null;
+  /** transistor isolated at the transistor level */
+  device: string | null;
+  /** structure whose explanation is shown (CHIP_INFO key) */
+  sel: string | null;
+  /** the clicked instance in a box model, outlined */
+  selBox: number | null;
+  view: ChipView;
+  /** 0 = layers in place, 1 = fully separated */
+  explode: number;
+  /** hidden layer ids (CHIP_LAYERS) */
+  hidden: string[];
+  /** draw only the selected structure */
+  iso: boolean;
+  /** illustrative ON state of the isolated transistor */
+  on: boolean;
+  /** changes on every "Reset view" (re-frames the camera) */
+  nonce: number;
+}

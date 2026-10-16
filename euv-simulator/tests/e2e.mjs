@@ -1,6 +1,6 @@
 // End-to-end checks, run against the production build in ./dist with headless Chromium (software WebGL).
 // Every test drives the real UI (mouse, keyboard, DOM) and asserts on real state or rendered output.
-//   npm run build && npm run test:e2e            (add --only "<substring>" to run a subset)
+//   npm run build && npm run test:e2e            (add --only "<substring>[|<substring>…]" to run a subset)
 import { startServer, launch, ready, sleep } from './lib.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,7 +15,7 @@ const assert = (c, m) => {
 };
 const near = (a, b, tol, m) => assert(Math.abs(a - b) <= tol, `${m}: got ${a}, expected ${b} ±${tol}`);
 async function test(name, fn) {
-  if (only && !name.toLowerCase().includes(only)) return;
+  if (only && !only.split('|').some((o) => name.toLowerCase().includes(o))) return;
   const t0 = Date.now();
   try {
     await fn();
@@ -1287,6 +1287,245 @@ await test('typewriter: name at once, text types in order, pause / resume / skip
   await settle();
 });
 
+// ───────────────────────────────────────────────────────────── finished wafer + chip explorer
+const chipDbg = () => S(() => window.__euv.scene.debugChip());
+const chipSt = () => S(() => window.__euv.sim.state.chip);
+const press = (sel) => page.click(sel, { force: true }); // no stability wait: frames are ~1 s apart on a software renderer
+/** click a chip structure in the 3-D view with the real mouse */
+const chipClick = async (spec) => {
+  const p = await S((s) => window.__euv.scene.findChipPoint(s), spec);
+  assert(p, 'no clickable point on screen for ' + JSON.stringify(spec));
+  const b = await page.locator('canvas.gl').boundingBox();
+  await page.mouse.click(b.x + p.x, b.y + p.y);
+  await sleep(150);
+};
+const cardName = () => S(() => document.querySelector('[data-testid=chip-name]')?.textContent);
+
+await test('finished wafer: offered at the end of the process; the machine gives way to the whole wafer', async () => {
+  await S(() => {
+    window.__euv.sim.exitInspect();
+    window.__euv.sim.togglePanel(false);
+  });
+  await page.click('[data-testid=chips] [data-stage="10"]');
+  await settle();
+  assert(await page.locator('[data-testid=stage-card] [data-testid=btn-finished-wafer]').isVisible(), 'the last stage should offer "Inspect finished wafer"');
+  await press('[data-testid=btn-finished-wafer]');
+  await settle();
+  const d = await chipDbg();
+  const c = await chipSt();
+  assert(c && c.level === 'wafer' && d.active && d.repr === 'wafer' && d.wafer, 'the wafer explorer should be open and drawn: ' + JSON.stringify({ level: c?.level, active: d.active }));
+  assert(d.calls < 40, 'only the wafer should be drawn now, not the machine (draw calls ' + d.calls + ')');
+  assert((await S(() => window.__euv.scene.labels.visibleIds())).length === 0, 'machine labels must be hidden');
+  assert((await cardName()) === 'Finished 300 mm wafer', 'card name: ' + (await cardName()));
+  const meta = await S(() => window.__euv.chip);
+  assert(meta.full > 300 && meta.partial > 20, `a 300 mm wafer with complete and partial edge dies (${meta.full} complete, ${meta.partial} partial)`);
+  assert(/physical scale/i.test(await S(() => document.querySelector('[data-testid=scale-badge]').textContent)), 'the wafer is shown at physical scale');
+  assert(d.autoRotate === true, 'the isolated wafer turns slowly');
+});
+
+await test('die grid: a complete die and a partial edge die can be selected, each with its own explanation', async () => {
+  await press('[data-testid=chip-spin]'); // hold the wafer still so the points found stay put
+  await settle();
+  await chipClick({ sel: 'die-edge' });
+  let c = await chipSt();
+  assert(c.sel === 'die-edge' && /edge die/i.test(await cardName()), 'edge die selected: ' + (await cardName()));
+  assert(await S(() => document.querySelector('[data-testid=chip-dive]').disabled), 'an edge die cannot be zoomed into');
+  await chipClick({ sel: 'die' });
+  c = await chipSt();
+  const meta = await S((i) => window.__euv.chip, c.die);
+  assert(c.sel === 'die' && c.die !== null && /^Die [A-Z]+\d+$/.test(await cardName()), 'complete die selected: ' + (await cardName()));
+  assert(!(await S(() => document.querySelector('[data-testid=chip-dive]').disabled)), 'a complete die can be zoomed into');
+  assert(meta, 'chip metadata');
+});
+
+await test('zoom: wafer → die → circuit region → cell, each a recognisable representation with labels and scale', async () => {
+  const wd = (await chipDbg()).dist;
+  await press('[data-testid=chip-dive]');
+  await settle();
+  let d = await chipDbg();
+  assert(d.level === 'die' && d.dist < wd / 8 && d.dieDetail, `die level: closer camera and die relief (dist ${d.dist.toFixed(1)} vs ${wd.toFixed(1)})`);
+  assert(d.labels.includes('r-core0') && d.labels.includes('d-w'), 'die labels with blocks and the illustrative dimensions: ' + d.labels.join(','));
+  assert(/12 × 10 mm/.test(await S(() => document.querySelector('[data-testid=chip-card] .pill').textContent)), 'die dimensions shown as an example');
+  await chipClick({ sel: 'fp-core' });
+  assert((await chipSt()).region?.startsWith('core'), 'a CPU core region should be selected');
+  await press('[data-testid=chip-dive]');
+  await settle();
+  d = await chipDbg();
+  assert(d.level === 'block' && d.repr === 'block', 'circuit-region level');
+  assert(d.block.gate > 500 && d.block.si > 500 && d.block.contact > 500 && d.block.copper > 200, 'cells, transistors, contacts and wires drawn: ' + JSON.stringify(d.block));
+  assert(['b-cells', 'b-sram'].every((k) => d.labels.includes(k)), 'labels for the standard cells and the SRAM: ' + d.labels.join(','));
+  assert(/enlarged educational model/i.test(await S(() => document.querySelector('[data-testid=scale-badge]').textContent)), 'the switch to an enlarged model is announced');
+  assert(/µm/.test(await S(() => document.querySelector('[data-testid=chip-scale]')?.textContent ?? '')), 'scale bar in micrometres');
+  // a circuit block isolates on selection
+  await press('[data-testid=chip-structures] [data-sel=blk-sram]');
+  await settle();
+  d = await chipDbg();
+  assert((await chipSt()).iso && d.block.gate < 500 && d.block.gate > 100 && /SRAM/.test(await cardName()), 'SRAM array isolated: ' + JSON.stringify(d.block));
+  await press('[data-testid=chip-iso]');
+  await settle();
+  await chipClick({ sel: 'std-cell' });
+  assert((await chipSt()).sel === 'std-cell', 'a standard cell selected');
+  await press('[data-testid=chip-dive]');
+  await settle();
+  d = await chipDbg();
+  assert(d.level === 'cell' && d.repr === 'cell', 'cell level');
+});
+
+await test('transistor structures are distinct geometry: gates, nanosheets, dielectric, source/drain, contacts, vias', async () => {
+  const d = await chipDbg();
+  const c = d.cell;
+  assert(c.gate === 6 && c.sheet === 12 && c.hk === 12 && c.epin === 3 && c.epip === 3, 'four GAA transistors (+2 dummy gates), 3 sheets each, wrapped in high-k, between source/drain regions: ' + JSON.stringify(c));
+  assert(c.contact >= 7 && c.via >= 10 && c.copper >= 15 && c.dielectric >= 5, 'contacts, vias, metal lines and dielectric layers: ' + JSON.stringify(c));
+  assert((await S(() => document.querySelectorAll('[data-testid=chip-transistors] [data-device]').length)) === 4, 'the four transistors are listed');
+  // cut across the gate, then click the parts on the cut face
+  await press('[data-testid=chip-views] [data-value=gate]');
+  await settle();
+  await chipClick({ sel: 'gate' });
+  assert((await cardName()) === 'Gate', 'clicking a gate explains the gate: ' + (await cardName()));
+  const t1 = await S(() => document.querySelector('[data-testid=tw-text]').textContent);
+  const info = await S(() => window.__euv.chip.CHIP_INFO);
+  assert(info.gate.overview.startsWith(t1), 'the typed text is the gate overview');
+  await chipClick({ sel: 'hk' });
+  assert(/dielectric/i.test(await cardName()), 'the gate dielectric has its own explanation: ' + (await cardName()));
+  await chipClick({ sel: 'sheet' });
+  assert(/nanosheet/i.test(await cardName()), 'the channel: ' + (await cardName()));
+});
+
+await test('cross-section and exploded views: the cut trims the geometry, the explode separates the layers', async () => {
+  const gate = await chipDbg();
+  assert(gate.trimmed > 20, 'the gate cut trims boxes: ' + gate.trimmed);
+  await press('[data-testid=chip-views] [data-value=channel]');
+  await settle();
+  const ch = await chipDbg();
+  assert(ch.trimmed > 20 && ch.trimmed !== gate.trimmed, 'the channel cut trims a different set: ' + ch.trimmed);
+  await press('[data-testid=chip-views] [data-value=top]');
+  await settle();
+  const top0 = (await chipDbg()).topY;
+  assert((await chipDbg()).trimmed === 0, 'no cut in the whole view');
+  await page.locator('[data-testid=chip-explode]').fill('1');
+  await settle();
+  const top1 = (await chipDbg()).topY;
+  assert(top1 > top0 + 200, `exploding raises the upper layers (${top0.toFixed(0)} → ${top1.toFixed(0)} nm)`);
+  const d = await chipDbg();
+  assert(d.calls > 5 && d.dist > d.minDist * 0.99, 'the exploded stack stays drawn and framed');
+  await page.locator('[data-testid=chip-explode]').fill('0');
+  await settle();
+});
+
+await test('layers: metal, vias and insulators are distinct materials, can be hidden and selected for explanation', async () => {
+  await press('[data-testid=chip-layers-btn]');
+  await sleep(200);
+  const legend = await S(() => Object.fromEntries([...document.querySelectorAll('[data-testid=chip-legend] .lg')].map((e) => [e.querySelector('b').textContent, e.querySelector('i').style.background])));
+  const metal = legend['Metal line'];
+  const via = legend['Via'];
+  const diel = legend['Insulating dielectric'];
+  assert(metal && via && diel && new Set([metal, via, diel]).size === 3, 'metal, via and dielectric need distinct colours: ' + JSON.stringify(legend));
+  await press('[data-select-layer=m0]');
+  assert((await cardName()) === 'M0 local interconnect' && (await chipSt()).sel === 'layer:m0', 'M0 layer selected: ' + (await cardName()));
+  await press('[data-select-layer=diel]');
+  assert((await cardName()) === 'Insulating dielectric', 'dielectric explained: ' + (await cardName()));
+  const before = (await chipDbg()).cell.dielectric;
+  await press('[data-layer=diel]');
+  await settle();
+  const after = (await chipDbg()).cell.dielectric;
+  assert(before > 0 && after === 0, `hiding the dielectric removes it (${before} → ${after})`);
+  const cu0 = (await chipDbg()).cell.copper;
+  await press('[data-layer=m2]');
+  await settle();
+  const cu1 = (await chipDbg()).cell.copper;
+  assert(cu1 < cu0, `hiding V2 + M2 removes its lines (${cu0} → ${cu1})`);
+  await press('[data-layer=diel]');
+  await press('[data-layer=m2]');
+  await press('[data-testid=chip-layers-btn]');
+  await settle();
+});
+
+await test('transistor: isolated and enlarged, turns slowly, drag pauses, illustrative ON/OFF state', async () => {
+  await press('[data-testid=chip-transistors] [data-device=nA]');
+  assert(/nFET/.test(await cardName()), 'transistor selected: ' + (await cardName()));
+  await press('[data-testid=chip-dive]');
+  await settle();
+  let d = await chipDbg();
+  assert(d.level === 'transistor' && d.cell.gate === 1 && d.cell.sheet === 3 && d.cell.copper === 0, 'only this transistor is drawn: ' + JSON.stringify(d.cell));
+  assert(d.autoRotate, 'it turns slowly');
+  const b = await page.locator('canvas.gl').boundingBox();
+  await page.mouse.move(b.x + b.width * 0.62, b.y + b.height * 0.45);
+  await page.mouse.down();
+  for (let k = 1; k <= 5; k++) await page.mouse.move(b.x + b.width * 0.62 + k * 20, b.y + b.height * 0.45);
+  await page.mouse.up();
+  await frames(2);
+  assert((await st()).spin === false && (await chipDbg()).autoRotate === false, 'dragging pauses the rotation');
+  await press('[data-testid=chip-onoff] [data-value=on]');
+  await settle();
+  d = await chipDbg();
+  assert(d.particles > 0 && (await chipSt()).on, 'ON shows the carriers flowing');
+  assert(/not a device simulation/i.test(await S(() => document.querySelector('[data-testid=chip-onoff]').textContent)), 'ON/OFF is labelled as an illustration');
+  await press('[data-testid=chip-onoff] [data-value=off]');
+  await settle();
+  assert((await chipDbg()).particles === 0, 'OFF: no carriers');
+  await press('[data-testid=chip-spin]');
+});
+
+await test('zooming never passes through or loses the model; scrolling past the limit dives one scale deeper', async () => {
+  const levels = [];
+  for (const lvl of ['transistor', 'cell', 'block', 'die', 'wafer']) {
+    if (lvl !== 'transistor') await S((l) => window.__euv.sim.chipGo(l), lvl);
+    await settle();
+    const b = await page.locator('canvas.gl').boundingBox();
+    await page.mouse.move(b.x + b.width * 0.6, b.y + b.height * 0.45);
+    for (let k = 0; k < 2; k++) await page.mouse.wheel(0, -2400);
+    await frames(3);
+    const d = await chipDbg();
+    levels.push(`${lvl}: ${d.dist.toFixed(1)} ≥ ${d.minDist.toFixed(1)}, calls ${d.calls}`);
+    assert(d.dist >= d.minDist * 0.98 && d.dist > 0 && d.calls >= 3, 'zoom clamped and model drawn — ' + levels.join(' | '));
+    assert((await chipSt()).level === lvl || lvl === 'wafer', 'a big zoom alone does not change scale at ' + lvl);
+  }
+  // on the wafer, at the zoom limit, with the cursor over a complete die: keep scrolling to dive into that die
+  await S(() => window.__euv.sim.chipGo('wafer'));
+  await settle();
+  const sw = await S(() => ({ chip: window.__euv.sim.state.chip?.level, spin: window.__euv.sim.state.spin, btn: !!document.querySelector('[data-testid=chip-spin]') }));
+  assert(sw.btn, 'rotation control expected on the wafer: ' + JSON.stringify(sw));
+  if (sw.spin) await press('[data-testid=chip-spin]');
+  await settle();
+  const p = await S(() => window.__euv.scene.findChipPoint({ sel: 'die' }));
+  const b = await page.locator('canvas.gl').boundingBox();
+  await page.mouse.move(b.x + p.x, b.y + p.y);
+  for (let k = 0; k < 4; k++) {
+    await page.mouse.wheel(0, -2400);
+    await frames(1);
+  }
+  for (let k = 0; k < 4 && (await chipSt()).level === 'wafer'; k++) {
+    await page.mouse.wheel(0, -300);
+    await sleep(80);
+  }
+  await settle();
+  assert((await chipSt()).level === 'die', 'scrolling on at the zoom limit should open the die under the cursor, level ' + (await chipSt()).level);
+  await S(() => window.__euv.sim.setSpin(true));
+});
+
+await test('back to the wafer and to the machine without losing either scene', async () => {
+  await S(() => window.__euv.sim.chipGo('cell'));
+  await settle();
+  await press('[data-testid=chip-wafer]');
+  await settle();
+  let c = await chipSt();
+  assert(c.level === 'wafer' && c.die !== null && (await chipDbg()).repr === 'wafer', 'Whole wafer returns to the wafer, keeping the chosen die');
+  await press('[data-testid=chip-up]');
+  await settle();
+  const s = await st();
+  const d = await chipDbg();
+  assert(s.chip === null && !d.active && s.stage === 10, 'back in the machine at the last stage');
+  assert((await S(() => window.__euv.scene.labels.visibleIds())).length > 0 && d.calls > 100, 'the machine is drawn again with its labels');
+  assert(Math.abs(d.near - 0.5) < 1e-6, 'camera clipping restored for the machine');
+  // and the explorer can be opened again
+  await press('[data-testid=btn-finished-wafer]');
+  await settle();
+  assert((await chipSt())?.level === 'wafer' && (await chipDbg()).active, 'the explorer opens again');
+  await page.keyboard.press('Escape');
+  await settle();
+  assert((await st()).chip === null, 'Escape from the wafer returns to the machine');
+});
+
 await test('keyboard shortcuts: Space, arrows, L, P, D, M, R, O, Escape', async () => {
   await S(() => {
     window.__euv.sim.select(null);
@@ -1444,6 +1683,42 @@ await test('no console errors during the whole desktop session', async () => {
     assert(s.drawn.includes(comp), 'the inspected part should be drawn: ' + s.drawn.join(','));
     await m.page.tap('[data-testid=insp-back]');
     assert((await m.page.evaluate(() => window.__euv.sim.state.inspect)) === null, 'Back should leave the inspection view on phones');
+  });
+  await test('mobile: the chip explorer fits the phone; card, toolbar and transistor list are usable', async () => {
+    await m.page.evaluate(() => {
+      window.__euv.sim.exitInspect();
+      window.__euv.sim.goStage(10, { keepPlaying: false });
+      window.__euv.sim.openChip();
+      window.__euv.sim.chipGo('die');
+      window.__euv.sim.chipGo('block', { region: 'core0' });
+      window.__euv.sim.chipGo('cell');
+    });
+    for (let k = 0; k < 3; k++) {
+      await sleep(150);
+      await m.page.evaluate(() => {
+        window.dispatchEvent(new Event('resize'));
+        window.__euv.scene.debugSettle();
+      });
+    }
+    const r = await m.page.evaluate(() => {
+      document.getAnimations().forEach((a) => {
+        try {
+          a.finish();
+        } catch {}
+      });
+      const box = (sel) => document.querySelector(sel)?.getBoundingClientRect().toJSON() ?? null;
+      return { sw: document.documentElement.scrollWidth, card: box('[data-testid=chip-card]'), bar: box('[data-testid=chip-bar]'), list: box('[data-testid=chip-transistors]'), level: window.__euv.sim.state.chip?.level };
+    });
+    assert(r.level === 'cell', 'cell level on the phone');
+    assert(r.sw <= 390, 'no horizontal scroll: ' + r.sw);
+    assert(r.card && r.card.left >= 8 && r.card.right <= 382, 'card keeps its gutters');
+    assert(r.list && r.list.height > 20, 'the transistor list must be visible: ' + JSON.stringify(r.list));
+    assert(r.bar && r.card.bottom < r.bar.top - 40, 'room for the model between the card and the toolbar');
+    await m.page.tap('[data-testid=chip-transistors] [data-device=pB]');
+    await m.page.tap('[data-testid=chip-dive]');
+    await sleep(300);
+    assert((await m.page.evaluate(() => window.__euv.sim.state.chip?.level)) === 'transistor', 'tap to isolate a transistor on the phone');
+    await m.page.evaluate(() => window.__euv.sim.exitChip());
   });
   await m.browser.close();
 }
