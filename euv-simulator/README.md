@@ -36,6 +36,30 @@ Pause / Resume rotation, Reverse, Reset view, Front / Side / Top / Iso, Full not
 Machine exterior. Dragging rotates the part and pauses the automatic rotation until Resume is pressed;
 scroll or pinch zooms; right-drag or a two-finger drag pans.
 
+**The finished wafer, down to one transistor.** At the last stage (etch) the stage card offers **Inspect
+finished wafer** (also in the *Explore* tab). The camera glides onto the wafer in the etch tool and crosses over
+to a separate multiscale explorer:
+
+| Level | Representation | What you can do |
+|---|---|---|
+| 1 · Wafer | **physical scale**: 300 mm wafer, notch, scribe lines, a grid of example 12 × 10 mm dies; dies cut by the edge are printed but marked unusable | select any die (complete or partial), slow rotation |
+| 2 · Die | **physical scale** in the die plane (feature heights exaggerated): a system-on-chip floorplan with CPU cores, SRAM caches, a graphics block, memory PHY, analog and the I/O ring with bumps | select a block, see its size; logic and SRAM blocks can be opened |
+| 3 · Circuit region | **enlarged educational model** of a 4 × 2.6 µm patch: 18 rows of standard cells, a 6T SRAM array with word lines, bit lines and periphery, M1–M3 signal routing, a clock H-tree and the power grid | select and isolate each structure; pick a logic cell |
+| 4 · Cell | **enlarged model** of a NAND2 cell built from four **gate-all-around nanosheet** transistors (architecture stated explicitly), with contacts, vias, M0–M3, upper metal, low-k dielectric and passivation | select gates, sheets, gate dielectric, source/drain, spacers, contacts, vias, metal levels, dielectric, wells, substrate |
+| 5 · Transistor | one transistor isolated and enlarged, slowly turning | cut along the channel or across the gate, explode the layers, illustrative ON/OFF state |
+
+Moving down a scale dives the camera onto the chosen item, cross-fades, and pulls out of the distance in the next
+representation; moving up does the reverse, landing back on the same spot. A zoom-path minimap, a scale bar
+("view ≈ 1.2 µm wide, about ×300,000 on screen") and a badge (*physical scale* / *enlarged educational model*)
+show where you are. Scroll past the zoom limit over an item (or double-click it) to go a scale deeper, and
+scroll back out to rise. The cell and transistor views have Whole / Cut along channel / Cut across gate,
+an Explode slider, and a Layers panel (visibility per layer, selection for explanation, material legend).
+Every selection shows its name at once and types its three explanation levels with the same typewriter as the
+machine explorer. The ON/OFF control moves illustrative carriers and is labelled as such: **no device physics,
+current or quantum effect is calculated.** Die size, floorplan and all dimensions are illustrative examples
+(typical public values), not a specification of any commercial chip or of anything an ASML machine defines.
+Real chips have far more transistors, more metal levels (often 12–20) and structures that vary by process and design.
+
 **The process.** Eleven stages on one timeline (125 s at 1× speed). The first eight happen **inside the scanner**
 (cyan frame, vacuum); the last three happen in **separate machines** (amber frame) and are labelled that way
 in the scene, the top bar and the stage cards.
@@ -129,6 +153,13 @@ and the quiz still work and the page says so.
   seven subsystems; the registry (`src/scene/registry.ts`) maps each id to its scene objects, picking
   priority, bounds and isolation roots. The machine view, the explorer, the card and the isolation all resolve
   ids through these two files.
+* **The chip explorer** (`src/scene/chip/`, `src/data/chip.ts`) is its own Three.js scene, created on first use.
+  The wafer is a textured disc with the dies as one instanced, textured plane; the die pattern is painted from the
+  same floorplan data used for picking. The circuit region and the cell are lists of axis-aligned boxes drawn
+  with one `InstancedMesh` per material (about 7 000 boxes in ~10 draw calls). Because every part is a box, a
+  cross-section is exact (each box is trimmed at the cut, so cut faces are real faces) and exploding, hiding,
+  isolating and highlighting are per-instance updates. Camera near/far planes follow the distance, so the same
+  camera works from 300 mm down to 1 nm.
 * **Isolation uses render layers**, not copies: the inspected objects are switched onto a second layer and
   the camera draws only that layer, so nothing is duplicated and the rest of the scene keeps its state.
   The casing (`src/scene/casing.ts`) and support systems (`src/scene/support.ts`) share merged geometry and
@@ -158,6 +189,13 @@ Back restoring the camera, assembly children, breadcrumbs, the explorer tab, Mac
 typewriter (name first, growing prefix, pause, resume, skip, level tabs without mixing, switching cancels,
 automatic advance, independence from the rotation, reduced motion).
 
+The chip explorer has its own tests: reaching it from the last stage (machine no longer drawn), complete and
+partial die selection, the dive wafer → die → region → cell with labels and scale, structure isolation,
+the geometry counts of the four GAA transistors, clicking gate / gate dielectric / sheets on a cut face, both
+cross-sections and the exploded view, layer visibility and selection with distinct metal / via / dielectric
+materials, transistor isolation with rotation, drag pause and ON/OFF, zoom clamping at every level and the
+scroll-to-dive, returning to the wafer and to the machine, and the phone layout.
+
 Limits you should know about:
 
 * The checks ran on **software-rendered WebGL** (SwiftShader, about 1–2 frames per second), so frame rate on
@@ -177,8 +215,9 @@ Limits you should know about:
 ```
 src/data/      stages, components (info panels), concepts, quiz, labels, geometry constants
 src/scene/     Three.js scene: casing, support systems, source, optics, wafer, resist slab, tracks/etch, labels, picking
+src/scene/chip/  finished wafer and chip explorer: wafer model, box models (circuit region, NAND2 cell), transitions
 src/store/     the simulation store (time, stage, view, tone, dose, selection, panel)
-src/ui/        React UI: top bar, stage card, exterior + inspection cards (Explore.tsx), dock/timeline, panel, widgets
+src/ui/        React UI: top bar, stage card, exterior + inspection cards (Explore.tsx), chip explorer (Chip.tsx), dock/timeline, panel, widgets
 scripts/       make-standalone.mjs (single-file build)
 tests/         end-to-end tests and screenshot helpers (Playwright)
 ```

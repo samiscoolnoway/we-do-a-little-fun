@@ -73,6 +73,22 @@ const BLOCK_PARTS: [string, string][] = [
   ['blk-clock', 'Clock tree'],
 ];
 
+const DEVICE_PARTS: [string, string][] = [
+  ['gate', 'Gate'],
+  ['hk', 'Gate dielectric'],
+  ['sheet', 'Nanosheets'],
+  ['sd-n', 'n source/drain'],
+  ['sd-p', 'p source/drain'],
+  ['spacer', 'Spacers'],
+  ['cap', 'Gate cap'],
+  ['tcn', 'Contact'],
+  ['mesa', 'Active region'],
+  ['sti', 'Isolation'],
+  ['well-p', 'p-well'],
+  ['well-n', 'n-well'],
+];
+const CELL_PARTS: [string, string][] = [...DEVICE_PARTS.filter(([id]) => id !== 'mesa'), ['gcn', 'Gate contact'], ['dummy', 'Dummy gate'], ['v0', 'Vias'], ['m0', 'M0'], ['rail', 'Power rails'], ['m1', 'M1'], ['m2', 'M2'], ['m3', 'M3'], ['top', 'Upper metal'], ['ild', 'Dielectric'], ['substrate', 'Substrate']];
+
 // ═══════════════════════════ entry points ═══════════════════════════
 export function FinishedWaferButton({ compact }: { compact?: boolean }) {
   return (
@@ -230,6 +246,15 @@ export function ChipCard() {
           {TRANSISTORS.map((t) => (
             <button key={t.id} type="button" className={`chip-link${c.device === t.id ? ' on' : ''}`} onClick={() => sim.chipSelect({ sel: t.info, device: t.id })} data-device={t.id}>
               {t.name}
+            </button>
+          ))}
+        </div>
+      )}
+      {(c.level === 'cell' || c.level === 'transistor') && (
+        <div className="insp-children parts" aria-label="Parts (select even when hidden behind others)" data-testid="chip-parts">
+          {(c.level === 'cell' ? CELL_PARTS : DEVICE_PARTS.filter(([id]) => (c.device?.startsWith('n') ? id !== 'sd-p' && id !== 'well-n' : id !== 'sd-n' && id !== 'well-p'))).map(([id, label]) => (
+            <button key={id} type="button" className={`chip-link${c.sel === id ? ' on' : ''}`} onClick={() => sim.chipSelect({ sel: id, device: c.level === 'transistor' ? (c.device ?? undefined) : undefined })} data-sel={id}>
+              {label}
             </button>
           ))}
         </div>
