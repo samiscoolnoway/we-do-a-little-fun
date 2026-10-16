@@ -82,6 +82,14 @@ deprotection with diffusion; development: solubility switch) instead of writing 
 | Quiz tab | 15 questions with explanations |
 | Keyboard | `Space` play/pause · `←` `→` stage · `L` labels · `P` optical path · `M` view · `O` open/close casing · `D` deep science · `R` restart · `Esc` leave inspection / close |
 
+## Run it without installing anything
+
+Download [`download/EUV-Lithography-Simulator.html`](download/EUV-Lithography-Simulator.html) (on GitHub: open the
+file, then the *Download raw file* button) and double-click it. It is the whole app in one file and runs in
+Chrome, Edge, Firefox or Safari straight from disk, with no server, account or internet connection (web fonts
+load when online; otherwise the system font is used). It is a copy of `dist/standalone.html` from the last
+build and is refreshed by hand (`cp dist/standalone.html download/EUV-Lithography-Simulator.html`).
+
 ## Run it
 
 ```bash
