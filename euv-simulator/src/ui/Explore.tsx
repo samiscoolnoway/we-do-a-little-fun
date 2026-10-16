@@ -87,7 +87,8 @@ function TypedLevels({ info }: { info: InspectInfo }) {
     let last = performance.now();
     let acc = typed[level];
     const step = (now: number) => {
-      acc += ((now - last) / 1000) * CPS;
+      // a long frame (e.g. shader compilation) must not dump half the text at once: at most a quarter second per step
+      acc += (Math.min(now - last, 250) / 1000) * CPS;
       last = now;
       const n = Math.min(full.length, Math.floor(acc));
       setTyped((p) => (p[level] === n ? p : p.map((v, i) => (i === level ? n : v))));

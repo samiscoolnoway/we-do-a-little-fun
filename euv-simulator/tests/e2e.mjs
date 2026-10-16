@@ -1029,6 +1029,20 @@ await test('isolation: every subsystem and every part is drawn alone (with its c
   assert(problems.length === 0, problems.join('\n'));
 });
 
+await test('a part that exists only at some moments moves the timeline to it, and Back restores the moment', async () => {
+  await go(5, 'stage');
+  await settle();
+  await S(() => window.__euv.sim.inspect('euvBeam'));
+  const a = await st();
+  assert(a.stage === 7 && a.playing === false, `inspecting the EUV light should show the exposure stage (stage ${a.stage})`);
+  await S(() => window.__euv.sim.inspect('collector')); // switching inside the inspection keeps the original moment
+  await S(() => window.__euv.sim.exitInspect());
+  const b = await st();
+  near(b.t, 5, 0.01, 'Back should return to the original time');
+  assert(b.stage === 0, 'Back should return to the original stage');
+  await settle();
+});
+
 await test('every part belongs to a subsystem and has its own overview, engineering and deep-science text', async () => {
   const r = await S(() => {
     const ex = window.__euv.explore;

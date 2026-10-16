@@ -81,7 +81,7 @@ const SHOW_AT: Record<string, [number, number, number]> = {
   plasma: [2, 3, 0.4],
 };
 /** where to go back to when inspection ends */
-let inspectReturn: { view: ViewMode; focusId: string | null; casing: CasingState } | null = null;
+let inspectReturn: { view: ViewMode; focusId: string | null; casing: CasingState; time: number | null } | null = null;
 let time = 0;
 const listeners = new Set<() => void>();
 const timeListeners = new Set<(t: number) => void>();
@@ -223,6 +223,7 @@ export const sim = {
   },
   /** Back to the complete machine exterior: ends any inspection and shows the whole machine. */
   closeCasing() {
+    if (inspectReturn?.time != null) sim.setTime(inspectReturn.time);
     inspectReturn = null;
     set({ inspect: null, selectedId: null, casing: 'closed', view: 'machine', focusId: null, viewNonce: state.viewNonce + 1 });
   },
@@ -237,9 +238,11 @@ export const sim = {
       sim.select(id);
       return;
     }
-    if (!state.inspect) inspectReturn = { view: state.view, focusId: state.focusId, casing: state.casing };
+    if (!state.inspect) inspectReturn = { view: state.view, focusId: state.focusId, casing: state.casing, time: null };
     const range = SHOW_AT[id];
     if (range && (state.stage < range[0] || state.stage > range[1])) {
+      // remember the original moment once, so Back returns to it
+      if (inspectReturn && inspectReturn.time === null) inspectReturn.time = time;
       sim.setTime(STAGE_START[range[0]] + range[2] * STAGE_DURATION[range[0]]);
       set({ playing: false });
     }
@@ -256,8 +259,9 @@ export const sim = {
   /** Back: leave inspection and restore the machine view the user came from. */
   exitInspect() {
     if (!state.inspect) return;
-    const r = inspectReturn ?? { view: state.view, focusId: state.focusId, casing: state.casing };
+    const r = inspectReturn ?? { view: state.view, focusId: state.focusId, casing: state.casing, time: null };
     inspectReturn = null;
+    if (r.time !== null) sim.setTime(r.time);
     set({ inspect: null, selectedId: null, view: r.view, focusId: r.focusId, casing: r.casing, viewNonce: state.viewNonce + 1 });
   },
   setSpin(spin: boolean) {
