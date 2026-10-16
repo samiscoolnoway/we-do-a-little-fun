@@ -1223,11 +1223,13 @@ await test('typewriter: name at once, text types in order, pause / resume / skip
   assert(info.levels.deep.length > 300, 'the deep-science text should be long enough to test pausing');
   await click('[data-testid=tw-tab-deep]');
   let d = await read();
-  for (let k = 0; k < 20 && !(d.level === 'deep' && d.text.length > 0); k++) {
+  for (let k = 0; k < 32 && !(d.level === 'deep' && d.text.length > 0); k++) {
+    // a forced click can land while the card re-renders: click again if the tab did not switch
+    if (k % 8 === 7 && d.level !== 'deep') await click('[data-testid=tw-tab-deep]');
     await sleep(250);
     d = await read();
   }
-  assert(d.level === 'deep' && d.text.length > 0 && info.levels.deep.startsWith(d.text), 'deep tab should type the deep-science text');
+  assert(d.level === 'deep' && d.text.length > 0 && info.levels.deep.startsWith(d.text), `deep tab should type the deep-science text (level ${d.level}, ${d.text.length} chars: "${d.text.slice(0, 40)}")`);
   assert(!d.text.includes(info.levels.overview.slice(0, 30)), 'levels must not mix');
   // pause holds the text, resume continues it
   await click('[data-testid=tw-pause]');
