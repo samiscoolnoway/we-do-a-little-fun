@@ -156,7 +156,7 @@ and the quiz still work and the page says so.
 * **The chip explorer** (`src/scene/chip/`, `src/data/chip.ts`) is its own Three.js scene, created on first use.
   The wafer is a textured disc with the dies as one instanced, textured plane; the die pattern is painted from the
   same floorplan data used for picking. The circuit region and the cell are lists of axis-aligned boxes drawn
-  with one `InstancedMesh` per material (about 7 000 boxes in ~10 draw calls). Because every part is a box, a
+  with one `InstancedMesh` per material (about 4 800 boxes in 6 draw calls for the circuit region). Because every part is a box, a
   cross-section is exact (each box is trimmed at the cut, so cut faces are real faces) and exploding, hiding,
   isolating and highlighting are per-instance updates. Camera near/far planes follow the distance, so the same
   camera works from 300 mm down to 1 nm.

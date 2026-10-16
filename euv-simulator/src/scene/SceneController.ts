@@ -539,6 +539,12 @@ export class SceneController {
     const chip = this.chip;
     if (!chip) return;
     if (c && this.chipLevel === null && !this.chipActive) {
+      // coming straight from an isolated inspection: drop the isolation (render layer) it left on the camera
+      if (this.lastInspect !== null || this.camera.layers.mask !== 1) {
+        this.applyIsolation(null);
+        this.lastInspect = null;
+        this.returnPose = null;
+      }
       // enter: glide down onto the finished wafer in the machine, then cross over to the wafer model
       this.chipReturn = { pos: this.camera.position.clone(), target: this.controls.target.clone(), userMoved: this.userMoved };
       this.chipLevel = c.level;
@@ -853,7 +859,8 @@ export class SceneController {
 
   /** Re-render and read back coarse pixels (used to prove the canvas shows content, not a blank frame). */
   debugSamplePixels(nx = 24, ny = 14) {
-    this.renderer.render(this.scene, this.camera);
+    // the scene that is on screen: the chip explorer's or the machine's
+    this.renderer.render(this.chipActive && this.chip ? this.chip.scene : this.scene, this.camera);
     const gl = this.renderer.getContext();
     const w = gl.drawingBufferWidth;
     const h = gl.drawingBufferHeight;

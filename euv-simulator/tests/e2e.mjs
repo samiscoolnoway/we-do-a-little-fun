@@ -1529,6 +1529,25 @@ await test('back to the wafer and to the machine without losing either scene', a
   assert((await st()).chip === null, 'Escape from the wafer returns to the machine');
 });
 
+await test('opening the wafer explorer straight from an isolated inspection draws the wafer (not a black view)', async () => {
+  await S(() => window.__euv.sim.inspect('collector'));
+  await settle();
+  assert((await S(() => window.__euv.scene.camera.layers.mask)) === 2, 'inspection uses the isolation layer');
+  await S(() => window.__euv.sim.setTab('explore'));
+  await sleep(150);
+  await press('[data-testid=panel] [data-testid=btn-finished-wafer]');
+  await settle();
+  const r = await S(() => ({ mask: window.__euv.scene.camera.layers.mask, px: window.__euv.scene.debugSamplePixels(), chip: window.__euv.sim.state.chip?.level, insp: window.__euv.sim.state.inspect }));
+  assert(r.chip === 'wafer' && r.insp === null, 'explorer open, inspection ended');
+  assert(r.mask === 1, 'the camera must draw the normal layer again, mask ' + r.mask);
+  assert(r.px.distinct >= 8 && r.px.bright > 5, 'the wafer must be visible on the canvas: ' + JSON.stringify(r.px));
+  await S(() => {
+    window.__euv.sim.exitChip();
+    window.__euv.sim.togglePanel(false);
+  });
+  await settle();
+});
+
 await test('keyboard shortcuts: Space, arrows, L, P, D, M, R, O, Escape', async () => {
   await S(() => {
     window.__euv.sim.select(null);
