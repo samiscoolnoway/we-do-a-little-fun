@@ -64,7 +64,7 @@ const NV = 4;
 
 export class EulerSolver {
   readonly mesh: Mesh;
-  readonly opts: SolverOptions;
+  opts: SolverOptions;
   readonly gamma: number;
   readonly R: number;
   /** padded width / height (two ghost layers on each side) */
@@ -112,6 +112,11 @@ export class EulerSolver {
     this.vv = new Float64Array(n);
     this.pr = new Float64Array(n);
     this.dtCell = new Float64Array(mesh.ni * mesh.nj);
+  }
+
+  /** switch reconstruction order (e.g. after a first-order start-up phase) */
+  setOrder(order: 1 | 2) {
+    this.opts = { ...this.opts, order };
   }
 
   /** padded index of cell (i, j); i, j may be −2…ni+1 / −2…nj+1 */
@@ -191,13 +196,10 @@ export class EulerSolver {
     const { rho, vu, vv, pr } = this;
     if (kind === 'wall') {
       // slip wall: mirror image with the normal velocity reversed (no flow through the wall)
-      for (const [src, dst] of [
-        [a, g1],
-        [b, g2],
-      ]) {
-        const un = vu[src] * nx + vv[src] * ny;
-        this.setGhost(dst, rho[src], vu[src] - 2 * un * nx, vv[src] - 2 * un * ny, pr[src]);
-      }
+      const una = vu[a] * nx + vv[a] * ny;
+      this.setGhost(g1, rho[a], vu[a] - 2 * una * nx, vv[a] - 2 * una * ny, pr[a]);
+      const unb = vu[b] * nx + vv[b] * ny;
+      this.setGhost(g2, rho[b], vu[b] - 2 * unb * nx, vv[b] - 2 * unb * ny, pr[b]);
       return;
     }
     if (kind === 'extrapolate') {
@@ -264,31 +266,28 @@ export class EulerSolver {
       } else {
         // i-face normals point to increasing i: outward is −n at imin, +n at imax
         let f = j * (ni + 1);
-        let l = Math.hypot(inx[f], iny[f]);
+        let l = this.mesh.ilen[f];
         this.applyBC(bc.imin, P(0, j), P(1, j), P(-1, j), P(-2, j), -inx[f] / l, -iny[f] / l);
         f = j * (ni + 1) + ni;
-        l = Math.hypot(inx[f], iny[f]);
+        l = this.mesh.ilen[f];
         this.applyBC(bc.imax, P(ni - 1, j), P(ni - 2, j), P(ni, j), P(ni + 1, j), inx[f] / l, iny[f] / l);
       }
     }
     // j direction
     for (let i = 0; i < ni; i++) {
       let f = i;
-      let l = Math.hypot(jnx[f], jny[f]);
+      let l = this.mesh.jlen[f];
       this.applyBC(bc.jmin, P(i, 0), P(i, 1), P(i, -1), P(i, -2), -jnx[f] / l, -jny[f] / l);
       f = nj * ni + i;
-      l = Math.hypot(jnx[f], jny[f]);
+      l = this.mesh.jlen[f];
       this.applyBC(bc.jmax, P(i, nj - 1), P(i, nj - 2), P(i, nj), P(i, nj + 1), jnx[f] / l, jny[f] / l);
     }
   }
 
   // ───────── numerical flux ─────────
-  /** Rusanov flux through a face with normal (nx, ny) scaled by its length, written into this.f */
-  private flux(rL: number, uL: number, vL: number, pL: number, rR: number, uR: number, vR: number, pR: number, nx: number, ny: number) {
+  /** Rusanov flux through a face with unit normal (ex, ey) and length len, written into this.f */
+  private flux(rL: number, uL: number, vL: number, pL: number, rR: number, uR: number, vR: number, pR: number, ex: number, ey: number, len: number) {
     const g = this.gamma;
-    const len = Math.hypot(nx, ny);
-    const ex = nx / len;
-    const ey = ny / len;
     const unL = uL * ex + vL * ey;
     const unR = uR * ex + vR * ey;
     const EL = pL / (g - 1) + 0.5 * rL * (uL * uL + vL * vL);
@@ -311,39 +310,40 @@ export class EulerSolver {
     return (a * (b * b + e) + b * (a * a + e)) / (a * a + b * b + 2 * e);
   }
 
+  /** limited face values of one variable q from the four cells ll, l | r, rr; written to this.qL / this.qR */
+  private qL = 0;
+  private qR = 0;
+  private recon(q: Float64Array, ll: number, l: number, r: number, rr: number) {
+    const dl = q[l] - q[ll];
+    const dc = q[r] - q[l];
+    const dr = q[rr] - q[r];
+    this.qL = q[l] + 0.5 * this.limit(dl, dc);
+    this.qR = q[r] - 0.5 * this.limit(dc, dr);
+  }
+
   /** face states between padded cells l and r, with outer neighbours ll (left of l) and rr (right of r) */
-  private faceFlux(ll: number, l: number, r: number, rr: number, nx: number, ny: number) {
+  private faceFlux(ll: number, l: number, r: number, rr: number, nx: number, ny: number, len: number) {
     const { rho, vu, vv, pr } = this;
-    let rL = rho[l],
-      uL = vu[l],
-      vL = vv[l],
-      pL = pr[l];
-    let rR = rho[r],
-      uR = vu[r],
-      vR = vv[r],
-      pR = pr[r];
+    const ex = nx / len;
+    const ey = ny / len;
     if (this.opts.order === 2) {
-      const lim = (qll: number, ql: number, qr: number, qrr: number, side: 0 | 1) => (side === 0 ? ql + 0.5 * this.limit(ql - qll, qr - ql) : qr - 0.5 * this.limit(qr - ql, qrr - qr));
-      const r2L = lim(rho[ll], rL, rR, rho[rr], 0);
-      const r2R = lim(rho[ll], rL, rR, rho[rr], 1);
-      const p2L = lim(pr[ll], pL, pR, pr[rr], 0);
-      const p2R = lim(pr[ll], pL, pR, pr[rr], 1);
-      if (r2L > 0 && r2R > 0 && p2L > 0 && p2R > 0) {
-        const u2L = lim(vu[ll], uL, uR, vu[rr], 0);
-        const u2R = lim(vu[ll], uL, uR, vu[rr], 1);
-        const v2L = lim(vv[ll], vL, vR, vv[rr], 0);
-        const v2R = lim(vv[ll], vL, vR, vv[rr], 1);
-        rL = r2L;
-        rR = r2R;
-        pL = p2L;
-        pR = p2R;
-        uL = u2L;
-        uR = u2R;
-        vL = v2L;
-        vR = v2R;
-      } else this.fallbacks++;
+      this.recon(rho, ll, l, r, rr);
+      const rL = this.qL;
+      const rR = this.qR;
+      this.recon(pr, ll, l, r, rr);
+      const pL = this.qL;
+      const pR = this.qR;
+      if (rL > 0 && rR > 0 && pL > 0 && pR > 0) {
+        this.recon(vu, ll, l, r, rr);
+        const uL = this.qL;
+        const uR = this.qR;
+        this.recon(vv, ll, l, r, rr);
+        this.flux(rL, uL, this.qL, pL, rR, uR, this.qR, pR, ex, ey, len);
+        return;
+      }
+      this.fallbacks++;
     }
-    this.flux(rL, uL, vL, pL, rR, uR, vR, pR, nx, ny);
+    this.flux(rho[l], vu[l], vv[l], pr[l], rho[r], vu[r], vv[r], pr[r], ex, ey, len);
   }
 
   /**
@@ -354,7 +354,7 @@ export class EulerSolver {
    * `a` = interior cell next to the wall, `b` = the one beyond it, `g` = first ghost; `wallOnLeft` = the face's
    * left (lower-index) side is the ghost.
    */
-  private wallFlux(a: number, b: number, g: number, nx: number, ny: number, wallOnLeft: boolean) {
+  private wallFlux(a: number, b: number, g: number, nx: number, ny: number, len: number, wallOnLeft: boolean) {
     const { rho, vu, vv, pr } = this;
     let r = rho[a],
       u = vu[a],
@@ -371,19 +371,18 @@ export class EulerSolver {
         v = rec(vv);
       } else this.fallbacks++;
     }
-    const len = Math.hypot(nx, ny);
     const ex = nx / len;
     const ey = ny / len;
     const un = u * ex + v * ey;
     const um = u - 2 * un * ex;
     const vm = v - 2 * un * ey;
-    if (wallOnLeft) this.flux(r, um, vm, p, r, u, v, p, nx, ny);
-    else this.flux(r, u, v, p, r, um, vm, p, nx, ny);
+    if (wallOnLeft) this.flux(r, um, vm, p, r, u, v, p, ex, ey, len);
+    else this.flux(r, u, v, p, r, um, vm, p, ex, ey, len);
   }
 
   /** residual R(U) = −Σ F·n over the faces of each cell (interior cells), using the current primitive arrays */
   private computeResidual() {
-    const { ni, nj, inx, iny, jnx, jny } = this.mesh;
+    const { ni, nj, inx, iny, jnx, jny, ilen, jlen } = this.mesh;
     const res = this.res;
     for (let v = 0; v < NV; v++) res[v].fill(0);
     const f = this.f;
@@ -395,9 +394,9 @@ export class EulerSolver {
       for (let i = 0; i <= ni; i++) {
         if (periodic && i === ni) continue; // face ni is face 0
         const fi = j * (ni + 1) + i;
-        if (!periodic && i === 0 && bc.imin === 'wall') this.wallFlux(P(0, j), P(1, j), P(-1, j), inx[fi], iny[fi], true);
-        else if (!periodic && i === ni && bc.imax === 'wall') this.wallFlux(P(ni - 1, j), P(ni - 2, j), P(ni, j), inx[fi], iny[fi], false);
-        else this.faceFlux(P(i - 2, j), P(i - 1, j), P(i, j), P(i + 1, j), inx[fi], iny[fi]);
+        if (!periodic && i === 0 && bc.imin === 'wall') this.wallFlux(P(0, j), P(1, j), P(-1, j), inx[fi], iny[fi], ilen[fi], true);
+        else if (!periodic && i === ni && bc.imax === 'wall') this.wallFlux(P(ni - 1, j), P(ni - 2, j), P(ni, j), inx[fi], iny[fi], ilen[fi], false);
+        else this.faceFlux(P(i - 2, j), P(i - 1, j), P(i, j), P(i + 1, j), inx[fi], iny[fi], ilen[fi]);
         const L = i - 1 >= 0 ? j * ni + (i - 1) : periodic ? j * ni + ni - 1 : -1;
         const R = i < ni ? j * ni + i : -1;
         if (L >= 0) for (let v = 0; v < NV; v++) res[v][L] -= f[v];
@@ -407,9 +406,9 @@ export class EulerSolver {
     for (let j = 0; j <= nj; j++)
       for (let i = 0; i < ni; i++) {
         const fj = j * ni + i;
-        if (j === 0 && bc.jmin === 'wall') this.wallFlux(P(i, 0), P(i, 1), P(i, -1), jnx[fj], jny[fj], true);
-        else if (j === nj && bc.jmax === 'wall') this.wallFlux(P(i, nj - 1), P(i, nj - 2), P(i, nj), jnx[fj], jny[fj], false);
-        else this.faceFlux(P(i, j - 2), P(i, j - 1), P(i, j), P(i, j + 1), jnx[fj], jny[fj]);
+        if (j === 0 && bc.jmin === 'wall') this.wallFlux(P(i, 0), P(i, 1), P(i, -1), jnx[fj], jny[fj], jlen[fj], true);
+        else if (j === nj && bc.jmax === 'wall') this.wallFlux(P(i, nj - 1), P(i, nj - 2), P(i, nj), jnx[fj], jny[fj], jlen[fj], false);
+        else this.faceFlux(P(i, j - 2), P(i, j - 1), P(i, j), P(i, j + 1), jnx[fj], jny[fj], jlen[fj]);
         if (j > 0) {
           const L = (j - 1) * ni + i;
           for (let v = 0; v < NV; v++) res[v][L] -= f[v];
@@ -423,7 +422,7 @@ export class EulerSolver {
 
   /** CFL time step of every cell from the current primitive arrays; returns the minimum */
   private computeDt(): number {
-    const { ni, nj, inx, iny, jnx, jny, area } = this.mesh;
+    const { ni, nj, inx, iny, jnx, jny, ilen, jlen, area } = this.mesh;
     const g = this.gamma;
     const cfl = this.opts.cfl;
     let dmin = Infinity;
@@ -439,13 +438,10 @@ export class EulerSolver {
         const g1 = g0 + ni;
         const s =
           Math.abs(u * inx[f0] + v * iny[f0]) +
-          c * Math.hypot(inx[f0], iny[f0]) +
           Math.abs(u * inx[f1] + v * iny[f1]) +
-          c * Math.hypot(inx[f1], iny[f1]) +
           Math.abs(u * jnx[g0] + v * jny[g0]) +
-          c * Math.hypot(jnx[g0], jny[g0]) +
           Math.abs(u * jnx[g1] + v * jny[g1]) +
-          c * Math.hypot(jnx[g1], jny[g1]);
+          c * (ilen[f0] + ilen[f1] + jlen[g0] + jlen[g1]);
         const dt = (cfl * area[j * ni + i]) / (0.5 * s);
         this.dtCell[j * ni + i] = dt;
         if (dt < dmin) dmin = dt;

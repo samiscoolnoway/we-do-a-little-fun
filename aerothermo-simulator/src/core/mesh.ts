@@ -28,6 +28,9 @@ export interface Mesh {
   /** j-face normals × length, index j·ni + i */
   jnx: Float64Array;
   jny: Float64Array;
+  /** face lengths (m per unit depth), same indexing as the face vectors */
+  ilen: Float64Array;
+  jlen: Float64Array;
   /** body outline (closed polygon) for O-grids */
   body?: { x: Float64Array; y: Float64Array };
   /** geometric description used to build the mesh */
@@ -38,7 +41,7 @@ export const nodeIndex = (m: Mesh, i: number, j: number) => j * (m.ni + 1) + i;
 export const cellIndex = (m: Mesh, i: number, j: number) => j * m.ni + i;
 
 /** Compute cell areas, centroids and oriented face normals from the node coordinates. */
-export function computeMetrics(m: Omit<Mesh, 'xc' | 'yc' | 'area' | 'inx' | 'iny' | 'jnx' | 'jny'>): Mesh {
+export function computeMetrics(m: Omit<Mesh, 'xc' | 'yc' | 'area' | 'inx' | 'iny' | 'jnx' | 'jny' | 'ilen' | 'jlen'>): Mesh {
   const { ni, nj, x, y } = m;
   const N = (i: number, j: number) => j * (ni + 1) + i;
   const xc = new Float64Array(ni * nj);
@@ -137,7 +140,11 @@ export function computeMetrics(m: Omit<Mesh, 'xc' | 'yc' | 'area' | 'inx' | 'iny
       jnx[j * ni + i] = nx;
       jny[j * ni + i] = ny;
     }
-  return { ...m, xc, yc, area, inx, iny, jnx, jny };
+  const ilen = new Float64Array(inx.length);
+  for (let f = 0; f < ilen.length; f++) ilen[f] = Math.hypot(inx[f], iny[f]);
+  const jlen = new Float64Array(jnx.length);
+  for (let f = 0; f < jlen.length; f++) jlen[f] = Math.hypot(jnx[f], jny[f]);
+  return { ...m, xc, yc, area, inx, iny, jnx, jny, ilen, jlen };
 }
 
 /** Uniform rectangular mesh (used for the shock-tube benchmark and conservation tests). */
