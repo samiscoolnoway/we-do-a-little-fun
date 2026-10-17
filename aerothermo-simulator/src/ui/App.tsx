@@ -1,19 +1,23 @@
 import { useState } from 'react';
 import { FIELD_INFO, type FieldName } from '../core/simulation';
-import { FlowControls, RunBar, ThermalControls } from './Controls';
+import { FlowControls, RunBar, STATUS_TEXT, ThermalControls } from './Controls';
 import { FlowView } from './FlowView';
 import { store, useStore } from './store';
 import { HeatingPanel } from './HeatingPanel';
+import { ExperimentsPanel } from './ExperimentsPanel';
+import { LearnPanel } from './LearnPanel';
 import { ThermalPanel } from './ThermalPanel';
 import { ProbePanel, Workbench } from './Workbench';
 import { Toggle } from './widgets';
 
-type Tab = 'workbench' | 'probe' | 'heating' | 'thermal';
+type Tab = 'workbench' | 'probe' | 'heating' | 'thermal' | 'experiments' | 'learn';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'workbench', label: 'Workbench' },
   { id: 'probe', label: 'Probe' },
   { id: 'heating', label: 'Surface heating' },
   { id: 'thermal', label: 'Heat shield' },
+  { id: 'experiments', label: 'Experiments' },
+  { id: 'learn', label: 'Learn' },
 ];
 
 export function App() {
@@ -54,9 +58,46 @@ export function App() {
           ))}
         </nav>
         <div className="tab-body">
-          {tab === 'workbench' ? <Workbench /> : tab === 'probe' ? <ProbePanel /> : tab === 'heating' ? <HeatingPanel /> : <ThermalPanel />}
+          {tab === 'workbench' ? (
+            <Workbench />
+          ) : tab === 'probe' ? (
+            <ProbePanel />
+          ) : tab === 'heating' ? (
+            <HeatingPanel />
+          ) : tab === 'thermal' ? (
+            <ThermalPanel />
+          ) : tab === 'experiments' ? (
+            <ExperimentsPanel />
+          ) : (
+            <LearnPanel />
+          )}
         </div>
       </aside>
+    </div>
+  );
+}
+
+/** compact run controls shown above the view on narrow screens (the full run bar is further down there) */
+function MobileRun() {
+  const running = useStore((s) => s.running);
+  const snap = useStore((s) => s.snap);
+  const st = snap?.diag.status ?? 'ready';
+  const blocked = st === 'failed' || st === 'max-steps';
+  return (
+    <div className="mobile-only mobile-run">
+      {running ? (
+        <button className="primary" onClick={() => store.pause()}>
+          Pause
+        </button>
+      ) : (
+        <button className="primary" data-testid="m-run" disabled={!snap || blocked} onClick={() => store.runSim()}>
+          {snap && snap.diag.steps > 0 ? 'Resume' : 'Run'}
+        </button>
+      )}
+      <button disabled={!snap || running || blocked} onClick={() => store.step(1)}>
+        Step
+      </button>
+      <span className={`status-chip s-${st}`}>{running ? 'Running' : STATUS_TEXT[st]}</span>
     </div>
   );
 }
@@ -65,6 +106,7 @@ function ViewToolbar() {
   const view = useStore((s) => s.view);
   return (
     <div className="viewbar" data-testid="viewbar">
+      <MobileRun />
       <label className="field-select">
         <span>Show</span>
         <select data-testid="sel-field" value={view.field} onChange={(e) => store.setView({ field: e.target.value as FieldName })}>

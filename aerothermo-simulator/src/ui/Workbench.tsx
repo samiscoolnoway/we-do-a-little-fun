@@ -2,7 +2,8 @@ import { freestreamOf } from '../core/config';
 import { FIELD_INFO, type FieldName } from '../core/simulation';
 import { fmt } from '../viz/colormap';
 import { buildLocator, pointInPolygon } from '../viz/locate';
-import { useMemo } from 'react';
+import { interpretProbe } from '../core/interpret';
+import { useMemo, useState } from 'react';
 import { STATUS_TEXT } from './Controls';
 import { useStore } from './store';
 import { Stat } from './widgets';
@@ -75,6 +76,7 @@ export function Workbench() {
         target={steady ? (d.criterion === 'windward' ? d.residualWindwardRef : d.residualRef) * Math.pow(10, -d.targetDrop) : 0}
         criterion={d.criterion}
       />
+      <DeepNotes />
       <div className="explain small">
         <strong>Total-enthalpy check.</strong> In a steady flow without viscosity or heat conduction, h + V²/2 must equal its freestream value everywhere, so its
         deviation is a direct measure of numerical error (mean over the domain: {fmt(d.enthalpyError.mean * 100, 2)} %). Errors are largest in the wake behind the body,
@@ -203,7 +205,60 @@ export function ProbePanel() {
           })}
         </tbody>
       </table>
+      <ProbeReading c={c} />
       <div className="hint">Cell values are averages over the cell computed by the finite-volume solver. Smooth colours in the view are interpolated for display only.</div>
+    </div>
+  );
+}
+
+function ProbeReading({ c }: { c: number }) {
+  const snap = useStore((s) => s.snap)!;
+  const run = useStore((s) => s.run);
+  const f = snap.fields;
+  const r = interpretProbe({ p: f.p[c], T: f.T[c], mach: f.mach[c], speed: f.speed[c], ds: f.ds[c] }, run);
+  return (
+    <div className="interpret" data-testid="probe-interpretation" data-region={r.region}>
+      <strong>{r.title}.</strong> {r.text}
+      {snap.diag.status !== 'converged' && snap.diag.status !== 'levelled' && <em> (The flow is not converged yet; this reading may still change.)</em>}
+    </div>
+  );
+}
+
+/** what each diagnostic means, at two depths */
+function DeepNotes() {
+  const [deep, setDeep] = useState(false);
+  return (
+    <div className="card small" data-testid="diag-notes">
+      <div className="runbar-row">
+        <h3 style={{ margin: 0 }}>What these numbers mean</h3>
+        <div className="segmented small-seg" role="radiogroup" aria-label="Explanation depth">
+          <button role="radio" aria-checked={!deep} className={!deep ? 'active' : ''} onClick={() => setDeep(false)} data-testid="notes-basic">
+            Basic
+          </button>
+          <button role="radio" aria-checked={deep} className={deep ? 'active' : ''} onClick={() => setDeep(true)} data-testid="notes-deep">
+            Deep
+          </button>
+        </div>
+      </div>
+      {!deep ? (
+        <ul>
+          <li><strong>Steps</strong>: how many times every cell has been updated.</li>
+          <li><strong>Δt and CFL</strong>: how far the solution moves per step; a CFL number above the stable limit makes the solution blow up.</li>
+          <li><strong>Residual</strong>: how fast the flow is still changing. When it has fallen by many orders of magnitude, the flow has settled.</li>
+          <li><strong>Mass imbalance</strong>: in a settled flow, as much air leaves the domain as enters it.</li>
+          <li><strong>Total-enthalpy error</strong>: the energy per kilogram should be the same everywhere; the difference is the computer&apos;s error.</li>
+          <li><strong>Invalid states</strong>: a negative density or pressure means the computation failed; the solver stops and says where.</li>
+        </ul>
+      ) : (
+        <ul>
+          <li><strong>Residual</strong> = RMS over cells of ∂ρ/∂t = (1/A) Σ faces of the mass flux, kg/(m³·s), evaluated before each update; the drop is measured from the largest value in the first five steps. The windward residual uses only cells upstream of the body centre.</li>
+          <li><strong>Local Δt</strong> = CFL · A / (½ Σ (|uₙ| + a) ℓ) per cell. Explicit SSP-RK2 is stable up to CFL ≈ 1. Implicit LU-SGS solves (A/Δt − ∂R/∂U) ΔU = R with a first-order Rusanov Jacobian in two Gauss–Seidel sweeps; its CFL is ramped up from 1 by 10 % per step, and per-cell updates are capped at 30 % change of ρ or p (counted as "limited").</li>
+          <li><strong>Fallback faces</strong>: faces where the MUSCL reconstruction would have produced ρ ≤ 0 or p ≤ 0 and first order was used instead.</li>
+          <li><strong>Mass imbalance</strong> = Σ ρ uₙ ℓ over the far-field faces (from the outermost cell states) divided by ρ∞ V∞ · 2H; it approaches zero only for a steady solution.</li>
+          <li><strong>Total-enthalpy error</strong> = (c_p T + V²/2) / (c_p T∞ + V∞²/2) − 1 per cell; the windward value excludes cells inside the captured shock (pressure jump &gt; 20 % to a neighbour), which hold non-physical intermediate states.</li>
+          <li><strong>Invalid states</strong>: density and pressure are checked after every stage; on failure the pre-step state is restored and the cell, stage and values are reported. No clipping or floor values are applied.</li>
+        </ul>
+      )}
     </div>
   );
 }
