@@ -742,3 +742,29 @@ table.data td.num {
   color: var(--warn);
   border-color: var(--warn);
 }
+.colmap {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.colmap-y {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 10.5px;
+  color: var(--muted);
+  text-align: center;
+}
+.colmap-canvas {
+  flex: 1;
+  min-width: 0;
+  height: 110px;
+  image-rendering: pixelated;
+  border-radius: 3px;
+}
+.colmap-x {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: var(--muted);
+  font-family: var(--mono);
+}

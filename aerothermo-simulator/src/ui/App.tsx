@@ -1,17 +1,19 @@
 import { useState } from 'react';
 import { FIELD_INFO, type FieldName } from '../core/simulation';
-import { FlowControls, RunBar } from './Controls';
+import { FlowControls, RunBar, ThermalControls } from './Controls';
 import { FlowView } from './FlowView';
 import { store, useStore } from './store';
 import { HeatingPanel } from './HeatingPanel';
+import { ThermalPanel } from './ThermalPanel';
 import { ProbePanel, Workbench } from './Workbench';
 import { Toggle } from './widgets';
 
-type Tab = 'workbench' | 'probe' | 'heating';
+type Tab = 'workbench' | 'probe' | 'heating' | 'thermal';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'workbench', label: 'Workbench' },
   { id: 'probe', label: 'Probe' },
   { id: 'heating', label: 'Surface heating' },
+  { id: 'thermal', label: 'Heat shield' },
 ];
 
 export function App() {
@@ -36,6 +38,7 @@ export function App() {
       <aside className="left">
         <RunBar />
         <FlowControls />
+        <ThermalControls />
       </aside>
       <main className="center">
         <ViewToolbar />
@@ -50,7 +53,9 @@ export function App() {
             </button>
           ))}
         </nav>
-        <div className="tab-body">{tab === 'workbench' ? <Workbench /> : tab === 'probe' ? <ProbePanel /> : <HeatingPanel />}</div>
+        <div className="tab-body">
+          {tab === 'workbench' ? <Workbench /> : tab === 'probe' ? <ProbePanel /> : tab === 'heating' ? <HeatingPanel /> : <ThermalPanel />}
+        </div>
       </aside>
     </div>
   );

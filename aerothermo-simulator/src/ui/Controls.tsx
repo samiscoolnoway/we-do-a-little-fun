@@ -1,4 +1,5 @@
 import { MESH_PRESETS, type MeshPreset, configWarnings, effectiveScheme } from '../core/config';
+import { MATERIALS, matchMaterial } from '../core/materials';
 import type { RunStatus } from '../core/simulation';
 import { store, useStore } from './store';
 import { NumberField, Section, SelectField } from './widgets';
@@ -239,5 +240,56 @@ export function FlowControls() {
         <NumberField label="Step limit" value={c.numerics.maxSteps} min={10} max={50000} step={10} slider={false} testid="in-maxsteps" onChange={(v) => store.edit('numerics', 'maxSteps', Math.round(v))} />
       </Section>
     </>
+  );
+}
+
+/** Heat-shield parameters. They do not change the flow, so editing them never requires a flow restart. */
+export function ThermalControls() {
+  const t = useStore((s) => s.edited.thermal);
+  const preset = matchMaterial(t);
+  return (
+    <Section title="Heat shield (conduction)" testid="sec-thermal">
+      <SelectField
+        label="Material preset"
+        value={preset?.id ?? 'custom'}
+        options={[...MATERIALS.map((m) => ({ value: m.id, label: m.label })), { value: 'custom', label: 'Custom values' }]}
+        testid="in-material"
+        hint={preset ? `Source: ${preset.source}.` : 'Custom properties.'}
+        onChange={(id) => {
+          const m = MATERIALS.find((x) => x.id === id);
+          if (!m) return;
+          store.setEdited({ ...store.state.edited, thermal: { ...store.state.edited.thermal, rho: m.rho, cp: m.cp, k: m.k, emissivity: m.emissivity } });
+        }}
+      />
+      <NumberField label="Density ρ_s" unit="kg/m³" value={t.rho} min={10} max={20000} step={10} log testid="in-rho-s" onChange={(v) => store.edit('thermal', 'rho', v)} />
+      <NumberField label="Specific heat c_p" unit="J/(kg·K)" value={t.cp} min={100} max={5000} step={10} testid="in-cp-s" onChange={(v) => store.edit('thermal', 'cp', v)} />
+      <NumberField label="Thermal conductivity k" unit="W/(m·K)" value={t.k} min={0.01} max={500} step={0.01} log testid="in-k-s" onChange={(v) => store.edit('thermal', 'k', v)} />
+      <NumberField
+        label="Thickness L"
+        unit="mm"
+        value={Math.round(t.thickness * 1e4) / 10}
+        min={1}
+        max={200}
+        step={0.5}
+        testid="in-thickness"
+        onChange={(v) => store.edit('thermal', 'thickness', v / 1000)}
+      />
+      <NumberField label="Initial temperature" unit="K" value={t.T0} min={100} max={1000} step={1} testid="in-t0-s" onChange={(v) => store.edit('thermal', 'T0', v)} />
+      <NumberField label="Surface emissivity ε" value={t.emissivity} min={0} max={1} step={0.01} testid="in-eps" onChange={(v) => store.edit('thermal', 'emissivity', v)} />
+      <SelectField
+        label="Back face"
+        value={t.rear}
+        options={[
+          { value: 'adiabatic', label: 'Insulated (adiabatic)' },
+          { value: 'fixed', label: 'Held at a fixed temperature' },
+        ]}
+        testid="in-rear"
+        onChange={(v) => store.edit('thermal', 'rear', v)}
+      />
+      {t.rear === 'fixed' && <NumberField label="Back-face temperature" unit="K" value={t.Trear} min={100} max={1000} step={1} onChange={(v) => store.edit('thermal', 'Trear', v)} />}
+      <NumberField label="Exposure time" unit="s" value={t.duration} min={0.1} max={10000} step={1} log testid="in-duration" onChange={(v) => store.edit('thermal', 'duration', v)} />
+      <NumberField label="Nodes through the thickness" value={t.nodes} min={11} max={401} step={10} slider={false} onChange={(v) => store.edit('thermal', 'nodes', Math.round(v))} />
+      <div className="hint">The heat-shield response is recomputed automatically from the current flow solution; no flow restart is needed.</div>
+    </Section>
   );
 }
