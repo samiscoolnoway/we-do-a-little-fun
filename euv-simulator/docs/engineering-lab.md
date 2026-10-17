@@ -132,3 +132,28 @@ with the same stagnation pressure.
 - **Heating:** a laminar continuum correlation with an uncertainty of order 10–20 %, evaluated with first-cell wall values. It does not predict transition and flags high Reynolds and Knudsen numbers.
 - **Heat shield:** constant properties, no ablation or pyrolysis, quasi-steady heating, independent 1D columns. The insulating material presets are illustrative values, not data for a product; the metals use Incropera Table A.1 at 300 K.
 - **Numerical accuracy:** the Rusanov flux is robust but diffusive. Shocks are smeared over 2–3 cells, and subsonic stagnation pressure is about 1 % high on the coarse mesh.
+
+## 3D solver prototype (not part of the app yet)
+
+`src/lab/core/euler3d.ts` is the first step towards a three-dimensional solver: the 3D compressible Euler
+equations, U = (ρ, ρu, ρv, ρw, E), on a uniform Cartesian box, with the same numerics as the 2D solver
+(Rusanov flux, MUSCL with minmod and first-order fallback, SSP-RK2, CFL time step) and periodic, extrapolation
+or slip-wall boundaries. It has no body, far field, implicit stepping, viscosity, turbulence or heat transfer,
+and it is not used by the user interface or the worker.
+
+Its tests (`tests/lab/euler3d.test.ts`) check exact properties and the exact Riemann solution:
+
+- a uniform flow stays uniform (to 1e-12), and gas at rest in a closed box stays at rest;
+- mass, momentum and energy are conserved (to 1e-12 in a periodic box; mass and energy in a closed box);
+- the Sod shock tube along x, y and z converges, and gives identical profiles along every axis. L1 density error at 100 / 200 / 400 cells:
+
+  | | 100 | 200 | 400 |
+  |---|---|---|---|
+  | 1st order | 0.0268 | 0.0183 | 0.0120 |
+  | 2nd order | 0.0096 | 0.0053 | 0.0030 |
+
+  These are the same levels as the 2D solver gives for the same scheme.
+- a spherical blast in a cube stays mirror- and axis-symmetric while it spreads in all three directions;
+- an unstable CFL number is detected and reported, and the last valid state is kept.
+
+This verifies the implementation; it is not a validation against experiment.
