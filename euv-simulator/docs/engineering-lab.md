@@ -223,15 +223,15 @@ truncation error of the wall, and only a different wall discretisation removes i
 |---|---|---|---|---|
 | Subtract the measured leak from results, or rescale ghost densities to cancel the net flux | Global only, by construction | Unchanged or worse: the large cancelling face fluxes stay; a correction moves them around | Cheap | Rejected: hides the error rather than removing it |
 | Conservative cut cells (volume fractions α, face apertures β, a wall face per cut cell carrying only the wall pressure) | Exact: no mass or energy crosses the body | Depends on reconstruction and small cells (below) | Small cells need local time steps or merging; ≈ 300 lines | Implemented as an experimental option |
-| Cut cells with cell merging (α < 0.5 merged into a neighbour) | Exact | Worse in our tests: the merged nose group sits at p/pitot ≈ 0.79 | Robust time step | Tried and removed |
-| Higher-order cut-cell reconstruction (gradients at cell centroids, wall-aware limiting) | Exact | Expected to fix the near-wall entropy | Larger change, new stencils | Next milestone |
+| Cut cells with cell merging (α < 0.5 merged into a neighbour) | Exact | First attempt worse (nose p/pitot ≈ 0.79); the cause was found later and fixed (see [Sliver cells](#sliver-cells-diagnosis-and-fix)) | Robust time step | Now the cut-cell default |
+| Higher-order cut-cell reconstruction (gradients at cell centroids, wall-aware limiting) | Exact | Cannot fix slivers on its own (see below) | Larger change, new stencils | Still open |
 
 **Experimental cut cells (`wall: 'cutcell'`).** Cut cells keep only their fluid part, with α and β sampled from
 the exact sphere. Each cut cell gets one wall face whose area vector closes the cell, A_w n_w = −Σ β A e_out, so
 a uniform state at rest is preserved exactly. The wall flux carries only the pressure from the exact wall Riemann
 problem. Faces whose MUSCL stencil reaches into the body read the ghost reflection states (only inside the
 stencil; faces into the body have zero aperture, so the update stays exactly conservative). Small cells are not
-merged; local time stepping handles their small stable steps.
+merged (as of e41f915; see the next section); local time stepping handles their small stable steps.
 
 Same Mach 2 cases, same convergence criterion, on one core. The near-wall loss is 1 − p₀,loc / pitot in the
 last full cell on the stagnation line (p₀,loc = p (1 + (γ−1)/2 M²)^{γ/(γ−1)}; zero for an isentropic
@@ -268,7 +268,108 @@ What the measurements show:
   with its value treated as if it sat at the cell centre. Making the sliver's faces first order removes the
   overshoot (p/pitot 0.965) but raises the loss in its full neighbour to 15 %; merging was worse.
 
-Conclusion: cut cells remove the conservation error but, as implemented, do not give better near-wall stagnation
-values than the ghost wall. The ghost wall therefore stays the default; cut cells are an opt-in for studies where
-exact conservation matters. The next step is a proper second-order cut-cell reconstruction (gradients evaluated
-at the fluid centroids, so that slivers are not treated as full cells), measured with the same tests.
+Conclusion (commit e41f915): cut cells remove the conservation error but, as implemented then, did not give
+better near-wall stagnation values than the ghost wall. The next section diagnoses why and fixes it.
+
+### Sliver cells: diagnosis and fix
+
+**Diagnosis (R/h = 8, commit e41f915).** The nose cell on the stagnation line is a sliver: α = 0.023, upstream
+aperture 1, downstream aperture 0, lateral apertures 0.02–0.08, wall face ≈ one full cell face. Three candidate
+causes were separated by experiment:
+
+| Test | Sliver p/pitot | Sliver T₀,loc/T₀ | Conclusion |
+|---|---|---|---|
+| baseline | 1.0538 | 1.0712 | |
+| CFL 0.8 → 0.4 | 1.0538 | 1.0712 | not the time step: the steady state does not depend on Δt |
+| 4× finer α/β sampling (α 0.023 → 0.040) | 1.0535 | 1.0709 | not the geometry: α only scales the time step; β and A_w were already accurate |
+| first-order faces next to the body | 0.9654 | 1.0534 | reconstruction changes the size, not the existence, of the error |
+
+The mechanism: a sliver has almost no volume, so its state is not a cell average but the interface state that
+makes the Rusanov mass and energy fluxes through its one open face vanish. The full cell upstream still moves
+towards the wall (reconstructed face velocity ≈ 28 m/s), so the balance raises the sliver's pressure by about
+ρu(a + u) (an acoustic, water-hammer rise, first order in M, where steady stagnation is second order) and its
+total enthalpy by Δp/ρ: 15.3 kJ/kg predicted, 18.2 kJ/kg measured. Centroid-based reconstruction cannot remove
+this; the sliver has to stop being an independent unknown.
+
+**Fix: three pieces, each conservative.**
+
+1. **Cell merging** (`merge`, default true): every cut cell with α < 0.5 joins the neighbour(s) across an open
+   face that best face away from the wall; only cells with α ≥ 0.5 are targets and targets do not link on, so
+   groups stay at 2–4 cells (the first attempt let small cells chain). Ties are all linked, so groups are
+   mirror-symmetric. A group shares one state, updated with the summed residual over the summed volume; its
+   steady state does not depend on the time step. Cells with α < 0.01 (≤ 5 of 512 volume samples, sampling noise
+   at the 45° diagonals, which had no large neighbour to join) are dropped instead of 10⁻³ before.
+2. **Second-order wall state.** Merging exposed a second error: the wall pressure came from the exact wall
+   Riemann problem fed with the cell-centre velocity, which adds a first-order impact pressure ρ a u_n. The
+   wall-normal velocity is now extrapolated to the wall with the minmod of the slope from the cell behind and the
+   slope to the mirror state (−u_n at distance 2d): the ghost method's MUSCL step, applied at the wall face.
+   Wall pressure = cell pressure (u_n = 0) was tried and rejected (the nose group kept 127 m/s towards the wall,
+   T₀ errors 5 %).
+3. **Reflection states in the stencil.** A merged sliver carries its group's value, so the MUSCL limiter of the
+   face upstream saw a zero slope and dropped to first order. Fluid cells whose centre lies inside the body now
+   supply a reflection state (as ghost cells do) when they are the outer point of a stencil; fluxes still use
+   their own state.
+
+Effect of each piece at R/h = 8 (nose = merged group; front wall = all wall cells with x < 0, area-weighted;
+measured during development, the merging-only row before the symmetric tie handling was added):
+
+| | nose p₀/pitot | front-wall mean p₀/pitot | front-wall max \|T₀ error\| |
+|---|---|---|---|
+| e41f915 | 1.061 (sliver) | 0.863 | 7.1 % |
+| + merging | 0.806 | 0.844 | 3.2 % |
+| + second-order wall state | 0.856 | 0.864 | 3.1 % |
+| + reflection states in the stencil | 0.954 | 0.883 | 3.3 % |
+| ghost wall, for reference | 0.963 | 0.874 | 3.3 % |
+
+**Front-wall metric.** In inviscid flow the wall streamline is the stagnation streamline, so the exact wall values
+are p₀ = pitot and T₀ everywhere on the body. The cells sit at a finite distance, so p₀ < pitot measures the
+numerical entropy near the wall and |T₀,loc/T₀ − 1| the total-enthalpy error; p₀ > pitot is non-physical.
+
+**Same Mach 2 cases, same convergence criterion** (one batch, one core; e41f915 re-run in the same session):
+
+| R/h | wall | steps | time | body flux | Δ/R | p_stag/pitot | T_stag/T₀ | nose p₀/pitot | front-wall mean p₀ | max p₀ | max \|T₀ err\| | symmetry |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 8 | ghost | 642 | 9.1 s | 6.96 % | 0.429 | 0.946 | 1.019 | 0.963 | 0.874 | 0.964 | 3.3 % | 3e-13 |
+| 8 | e41f915 | 631 | 8.3 s | 0 | 0.382 | 1.054 | 1.069 | 1.061 | 0.863 | 1.061 | 7.1 % | 2e-13 |
+| 8 | new | 687 | 10.6 s | 0 | 0.365 | 0.927 | 1.014 | 0.954 | 0.883 | 0.972 | 3.3 % | 1e-13 |
+| 12 | ghost | 1000 | 48.0 s | 4.41 % | 0.405 | 0.965 | 1.015 | 0.973 | 0.897 | 0.975 | 3.4 % | 6e-10 |
+| 12 | e41f915 | 1004 | 46.6 s | 0 | 0.376 | 1.044 | 1.051 | 1.046 | 0.893 | 1.046 | 5.4 % | 7e-10 |
+| 12 | new | 1083 | 57.8 s | 0 | 0.373 | 0.950 | 1.012 | 0.963 | 0.903 | 0.973 | 2.9 % | 8e-10 |
+| 16 | ghost | 1315 | 149.2 s | 2.98 % | 0.394 | 0.976 | 1.011 | 0.981 | 0.909 | 0.981 | 3.1 % | 5e-9 |
+| 16 | e41f915 | 1326 | 147.7 s | 0 | 0.373 | 0.950 | 1.009 | 0.953 | 0.909 | 0.999 | 5.4 % | 7e-9 |
+| 16 | new | 1339 | 165.3 s | 0 | 0.370 | 0.965 | 1.012 | 0.972 | 0.914 | 0.973 | 3.0 % | 5e-9 |
+
+(At R/h = 12 the e41f915 nose sliver had α = 0.006; with the new drop threshold it is solid and the nose cell is
+full.)
+
+**Sensitivity to where the surface cuts the grid** (R/h = 8, grid shifted upstream by 0, ¼, ½, ¾ cell; nose cell
+α = 0.02, 0.27, 0.52, 0.77):
+
+| | nose p/pitot | front-wall mean p₀ | max p₀ | max \|T₀ err\| |
+|---|---|---|---|---|
+| e41f915 | 1.054, 1.001, 0.943, 0.898 | 0.849–0.864 | 0.955–1.061 | 5.3–7.1 % |
+| new | 0.927, 0.897, 0.961, 0.945 | 0.883–0.892 | 0.967–0.972 | 2.8–3.7 % |
+
+What the measurements show:
+
+- **Conservation unchanged:** body flux exactly 0; closed box, 60 steps: mass 2e-15, energy 2e-14 (merged and
+  unmerged alike).
+- **Slivers fixed:** no wall cell exceeds pitot at any resolution or grid offset (e41f915: up to 1.061); the
+  largest total-enthalpy error drops from 4.6–7.1 % to 2.6–3.7 % over all runs, the level of the ghost wall; the spread of the
+  nose pressure over grid offsets falls from 0.156 to 0.064.
+- **Stagnation values:** the nose pressure now converges monotonically from below (−7.3 %, −5.0 %, −3.5 %); e41f915
+  went +5.4 %, +4.4 %, −5.0 % depending on whether the nose cell was a sliver. The static-pressure error at R/h = 8
+  and 12 is larger in magnitude than e41f915's sliver overshoot (7.3 % vs 5.4 %, 5.0 % vs 4.4 %), because the nose
+  value now belongs to a cell half a cell from the wall that still moves at M ≈ 0.2; its local total pressure is
+  closer to pitot at every resolution (error 4.6/3.7/2.8 % vs 6.1/4.6/4.7 %). The ghost wall is still closer
+  (3.7/2.7/1.9 %).
+- **Wall-wide entropy:** the front-wall mean total pressure is now slightly better than the ghost wall's at every
+  resolution (0.883/0.903/0.914 vs 0.874/0.897/0.909).
+- **Standoff:** 0.365, 0.373 (R/h = 10), 0.373, 0.370: no measurable trend on these grids, and ±0.004 when the grid
+  is shifted. It stays 14–16 % above Billig, as before; the wall treatment does not explain that gap.
+- **Cost:** 12–28 % slower than e41f915 per run (group updates, the second set of stencil states), about the same
+  number of steps (+1–9 %); 11–20 % slower than the ghost wall.
+
+The ghost wall stays the default (it is the reference the tests guard, and its nose values are still the most
+accurate); cut cells remain an experimental opt-in, now without the sliver failure.
+

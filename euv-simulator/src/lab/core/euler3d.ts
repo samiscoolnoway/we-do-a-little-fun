@@ -45,10 +45,14 @@ export type BC3D = 'periodic' | 'extrapolate' | 'wall' | 'inflow';
  *    if away): no mass and no energy cross the body, by construction. Faces whose second-order stencil reaches
  *    into the body read the ghost-cell reflection states inside the solid (reconstruction 'ghost', default) or
  *    drop to first order ('firstorder'); either way the faces into the body have aperture 0 and carry no flux.
- *    Cells with α < 1e-3 are dropped. Small cut cells are not merged and keep small stable time steps, so a
- *    global time step becomes tiny: use local time stepping for steady states. EXPERIMENTAL: exactly
- *    conservative, but on coarse grids it produces more spurious entropy next to the wall than 'ghost', and very
- *    small cells (slivers) can overshoot the stagnation state; see docs/engineering-lab.md.
+ *    With 'ghost' reconstruction the wall pressure also uses a second-order wall state: the wall-normal velocity
+ *    is extrapolated to the wall with the minmod of the slope from the cell behind and the slope to the mirror
+ *    state, as the ghost method's MUSCL step does (a cell-centre velocity fed to the wall Riemann problem would
+ *    add a first-order impact pressure ρ a u_n). Cells with α < 0.01 are dropped. Cut cells with α < 0.5 are
+ *    merged with the neighbour(s) facing away from the wall (merge, default true; see buildMergeGroups), which
+ *    removes slivers as independent unknowns; unmerged small cells keep small stable time steps, so a global time
+ *    step becomes tiny: use local time stepping for steady states. EXPERIMENTAL: exactly conservative, with
+ *    near-wall errors comparable to 'ghost' on coarse grids; see docs/engineering-lab.md.
  */
 export interface ImmersedSphere {
   cx: number;
@@ -59,6 +63,9 @@ export interface ImmersedSphere {
   /** cut cells: second-order reconstruction next to the body using ghost reflection states in the stencil
    *  ('ghost', default) or first order on faces whose stencil reaches into the body ('firstorder') */
   reconstruction?: 'ghost' | 'firstorder';
+  /** cut cells: merge every small cut cell (α < 0.5) with the neighbour(s) that face away from the wall
+   *  (default true; false keeps every cut cell independent) */
+  merge?: boolean;
 }
 
 export interface Grid3D {
@@ -124,6 +131,12 @@ export interface Step3DResult {
 }
 
 const NV = 5;
+/** cut cells with a fluid volume fraction below this are merged with a neighbour (merge option) */
+const MERGE_ALPHA = 0.5;
+/** cut cells with a smaller fluid volume fraction are dropped (made solid): 5 of the 512 volume samples */
+const DROP_ALPHA = 0.01;
+/** most neighbours kept in a wall-state stencil (tied axes and tied mirror members) */
+const WALL_NB = 6;
 
 export class EulerSolver3D {
   readonly grid: Grid3D;
@@ -166,6 +179,12 @@ export class EulerSolver3D {
   private srcW = new Float64Array(0);
   private srcFlip = new Uint8Array(0);
   private ghostN = new Float64Array(0);
+  /** cut cells: ghost entries g ≥ ghostSolid are fluid cut cells whose centre lies inside the body; their
+   *  reflection states go to the stencil arrays (sr, sq, sp), read only as the outer points of MUSCL stencils */
+  private ghostSolid = 0;
+  private sr: Float64Array | null = null;
+  private sq: Float64Array[] = [];
+  private sp: Float64Array | null = null;
   /** cut-cell geometry (wall: 'cutcell'): fluid volume fractions, face apertures per axis, wall faces */
   private cut = false;
   private alpha: Float64Array | null = null;
@@ -174,6 +193,17 @@ export class EulerSolver3D {
   private wallPad = new Int32Array(0);
   private wallA = new Float64Array(0);
   private padInactive: Uint8Array | null = null;
+  /** merged cut-cell groups: the members (interior indices) of each group; merged[c] = 1 for members */
+  private groups: Int32Array[] = [];
+  private merged: Uint8Array | null = null;
+  /** small cut cells that found no target to merge with (kept independent) */
+  private unmergedSmall = 0;
+  /** wall-state reconstruction per wall face: up to WALL_NB padded indices of the neighbours behind the cell (or
+   *  group) along the wall normal (−1: unused), their distances D from the cell (or group) centre along n_w, and
+   *  the distance d of that centre from the wall (0: no reconstruction) */
+  private wallNb = new Int32Array(0);
+  private wallD = new Float64Array(0);
+  private wallDist = new Float64Array(0);
   /** net mass flux into the domain through its outer boundaries at the start of the last step, kg/s */
   boundaryMassFlux = 0;
   private lastBoundaryFlux = 0;
@@ -257,7 +287,7 @@ export class EulerSolver3D {
     return [Math.min(n - 1, Math.max(0, m)), flip];
   }
 
-  private buildSphere(sp: ImmersedSphere, markSolid = true) {
+  private buildSphere(sp: ImmersedSphere, markSolid = true, fluidInside = false) {
     const { nx, ny, nz, x0, y0, z0, dx, dy, dz } = this.grid;
     const bc = this.opts.bc;
     const idx = (i: number, j: number, k: number) => (k * ny + j) * nx + i;
@@ -292,6 +322,17 @@ export class EulerSolver3D {
           if ((gx - sp.cx) ** 2 + (gy - sp.cy) ** 2 + (gz - sp.cz) ** 2 >= sp.r * sp.r) continue;
           ghosts.push(i, j, k);
         }
+    this.ghostSolid = ghosts.length / 3;
+    // cut cells only: fluid cells whose centre lies inside the body (slivers and some small cut cells) also get a
+    // reflection state at their centre, for the stencils of their neighbours' faces
+    if (fluidInside)
+      for (let k = 0; k < nz; k++)
+        for (let j = 0; j < ny; j++)
+          for (let i = 0; i < nx; i++) {
+            if (this.solid[idx(i, j, k)]) continue;
+            const [gx, gy, gz] = this.centre(i, j, k);
+            if ((gx - sp.cx) ** 2 + (gy - sp.cy) ** 2 + (gz - sp.cz) ** 2 < sp.r * sp.r) ghosts.push(i, j, k);
+          }
     const G = ghosts.length / 3;
     this.ghostPad = new Int32Array(G);
     this.srcPad = new Int32Array(8 * G);
@@ -362,7 +403,7 @@ export class EulerSolver3D {
             a = n / N3 ** 3;
           }
           const ci = (k * ny + j) * nx + i;
-          if (a < 1e-3) {
+          if (a < DROP_ALPHA) {
             this.solid[ci] = 1;
             alpha[ci] = 0;
           } else alpha[ci] = a;
@@ -454,7 +495,11 @@ export class EulerSolver3D {
       // second-order reconstruction next to the body: the solid cells reached by the stencils get the ghost-cell
       // reflection states (used only inside the MUSCL stencil; faces into the body have aperture 0 and carry no
       // flux, so the update stays exactly conservative)
-      this.buildSphere(sp, false);
+      this.buildSphere(sp, false, true);
+      const n = this.px * this.py * this.pz;
+      this.sr = new Float64Array(n);
+      this.sq = [new Float64Array(n), new Float64Array(n), new Float64Array(n)];
+      this.sp = new Float64Array(n);
       const ghostSet = new Set<number>(this.ghostPad);
       for (let q = 0; q < pin.length; q++) if (pin[q] && ghostSet.has(q)) pin[q] = 0;
       // domain ghost layers copy their source cell's flag again
@@ -471,6 +516,186 @@ export class EulerSolver3D {
           }
     }
     this.padInactive = pin;
+    if (sp.merge !== false) this.buildMergeGroups();
+    if (sp.reconstruction !== 'firstorder') this.buildWallStencil(sp);
+  }
+
+  /**
+   * Cell merging for small cut cells. Why: a sliver (α ≪ 1) whose open face nearly coincides with its wall face
+   * has almost no volume, so its state is not a cell average but whatever interface state makes the Rusanov mass
+   * and energy fluxes through that face vanish; with the neighbour still moving towards the wall this raises its
+   * pressure by about ρu(a + u) and its total enthalpy by Δp/ρ. Merging removes the sliver as an independent
+   * unknown. Each cut cell with α < MERGE_ALPHA links to the neighbour(s) across an open face that best face away
+   * from the wall (largest −n_w·e; ties all linked, so mirror-symmetric geometry gives mirror-symmetric groups).
+   * Only cells with α ≥ MERGE_ALPHA are targets, and targets do not link on, so no chains of small cells form.
+   * A group shares one state, updated with its members' summed residual over their summed fluid volume: still
+   * exactly conservative, and its steady state (summed residual = 0) does not depend on the time step.
+   */
+  private buildMergeGroups() {
+    const { nx, ny, nz } = this.grid;
+    const alpha = this.alpha!;
+    const parent = new Int32Array(nx * ny * nz).map((_, q) => q);
+    const find = (q: number): number => {
+      while (parent[q] !== q) q = parent[q] = parent[parent[q]];
+      return q;
+    };
+    for (let w = 0; w < this.wallCell.length; w++) {
+      const c = this.wallCell[w];
+      if (alpha[c] >= MERGE_ALPHA) continue;
+      const i = c % nx;
+      const j = ((c - i) / nx) % ny;
+      const k = (c - i - j * nx) / (nx * ny);
+      const A = [this.wallA[3 * w], this.wallA[3 * w + 1], this.wallA[3 * w + 2]];
+      const An = Math.hypot(A[0], A[1], A[2]);
+      const cand: [number, number][] = [];
+      for (let axis = 0; axis < 3; axis++)
+        for (const dir of [-1, 1]) {
+          const q = [i, j, k];
+          q[axis] += dir;
+          if (q[0] < 0 || q[1] < 0 || q[2] < 0 || q[0] >= nx || q[1] >= ny || q[2] >= nz) continue;
+          const nb = (q[2] * ny + q[1]) * nx + q[0];
+          if (this.solid[nb] || alpha[nb] < MERGE_ALPHA) continue;
+          const low = dir === 1 ? q : [i, j, k];
+          if (this.beta[axis][this.faceIndex(axis, low[0], low[1], low[2])] <= 0) continue;
+          cand.push([nb, (-dir * A[axis]) / An]);
+        }
+      if (!cand.length) {
+        this.unmergedSmall++;
+        continue;
+      }
+      const best = Math.max(...cand.map((x) => x[1]));
+      for (const [nb, sc] of cand) if (sc >= best - 1e-9) parent[find(c)] = find(nb);
+    }
+    const members = new Map<number, number[]>();
+    for (let c = 0; c < parent.length; c++) {
+      if (this.solid[c]) continue;
+      const r = find(c);
+      if (!members.has(r)) members.set(r, []);
+      members.get(r)!.push(c);
+    }
+    this.groups = [...members.values()].filter((m) => m.length > 1).map((m) => Int32Array.from(m));
+    this.merged = new Uint8Array(nx * ny * nz);
+    for (const g of this.groups) for (const c of g) this.merged[c] = 1;
+  }
+
+  /**
+   * Wall-state stencil: for each wall face, the centre x_g of its cell (or of its merged group: the α-weighted
+   * mean of the members' centres), its distance d from the wall, and the neighbours behind it: one step against
+   * the dominant axis of the wall normal from the group's largest member. Ties (equal |n| components, mirror
+   * members of equal α) keep every tied neighbour, so that mirror-symmetric geometry gives a symmetric stencil.
+   */
+  private buildWallStencil(sp: ImmersedSphere) {
+    const { nx, ny, nz, dx, dy, dz, x0, y0, z0 } = this.grid;
+    const alpha = this.alpha!;
+    const groupOf = new Map<number, Int32Array>();
+    for (const g of this.groups) for (const c of g) groupOf.set(c, g);
+    const nW = this.wallCell.length;
+    this.wallNb = new Int32Array(WALL_NB * nW).fill(-1);
+    this.wallD = new Float64Array(WALL_NB * nW);
+    this.wallDist = new Float64Array(nW);
+    const ijk = (c: number) => {
+      const i = c % nx;
+      const j = ((c - i) / nx) % ny;
+      return [i, j, (c - i - j * nx) / (nx * ny)];
+    };
+    const lens = [dx, dy, dz];
+    const org = [x0, y0, z0];
+    const dims = [nx, ny, nz];
+    for (let w = 0; w < nW; w++) {
+      const c = this.wallCell[w];
+      const members = groupOf.get(c) ?? Int32Array.of(c);
+      const xg = [0, 0, 0];
+      let va = 0;
+      let amax = 0;
+      for (const m of members) {
+        const xc = this.centre(ijk(m)[0], ijk(m)[1], ijk(m)[2]);
+        for (let d = 0; d < 3; d++) xg[d] += alpha[m] * xc[d];
+        va += alpha[m];
+        amax = Math.max(amax, alpha[m]);
+      }
+      for (let d = 0; d < 3; d++) xg[d] /= va;
+      const dist = Math.hypot(xg[0] - sp.cx, xg[1] - sp.cy, xg[2] - sp.cz) - sp.r;
+      if (!(dist > 0)) continue;
+      const A = [this.wallA[3 * w], this.wallA[3 * w + 1], this.wallA[3 * w + 2]];
+      const An = Math.hypot(A[0], A[1], A[2]);
+      const n = A.map((a) => a / An);
+      const nmax = Math.max(...n.map(Math.abs));
+      const found: [number, number][] = [];
+      for (const m of members) {
+        if (alpha[m] < amax - 1e-12) continue;
+        for (let ax = 0; ax < 3; ax++) {
+          if (Math.abs(n[ax]) < nmax - 1e-9) continue;
+          const q = ijk(m);
+          q[ax] -= Math.sign(n[ax]);
+          if (q[ax] < -1 || q[ax] > dims[ax]) continue;
+          const cq = (q[2] * ny + q[1]) * nx + q[0];
+          if (q[ax] >= 0 && q[ax] < dims[ax] && (this.solid[cq] || members.includes(cq))) continue;
+          const D = [0, 1, 2].reduce((sum, d) => sum + (xg[d] - (org[d] + (q[d] + 0.5) * lens[d])) * n[d], 0);
+          if (D > 0 && found.length < WALL_NB) found.push([this.P(q[0], q[1], q[2]), D]);
+        }
+      }
+      if (!found.length) continue;
+      found.forEach(([pq, D], t) => {
+        this.wallNb[WALL_NB * w + t] = pq;
+        this.wallD[WALL_NB * w + t] = D;
+      });
+      this.wallDist[w] = dist;
+    }
+  }
+
+  /**
+   * the fluid cells touching the body, one entry per independent state (a merged group counts once, at its
+   * largest member), with the wall area they carry: cut cells |A_w| summed over the group, ghost-cell wall the
+   * stair faces shared with solid cells
+   */
+  wallUnits(): { i: number; j: number; k: number; area: number }[] {
+    const { nx, ny, nz, dx, dy, dz } = this.grid;
+    const at = (c: number) => {
+      const i = c % nx;
+      const j = ((c - i) / nx) % ny;
+      return { i, j, k: (c - i - j * nx) / (nx * ny) };
+    };
+    const units = new Map<number, number>();
+    if (this.cut) {
+      const rep = new Map<number, number>();
+      for (const g of this.groups) {
+        let best = g[0];
+        for (const c of g) if (this.alpha![c] > this.alpha![best]) best = c;
+        for (const c of g) rep.set(c, best);
+      }
+      for (let w = 0; w < this.wallCell.length; w++) {
+        const r = rep.get(this.wallCell[w]) ?? this.wallCell[w];
+        units.set(r, (units.get(r) ?? 0) + Math.hypot(this.wallA[3 * w], this.wallA[3 * w + 1], this.wallA[3 * w + 2]));
+      }
+    } else {
+      const areas = [dy * dz, dx * dz, dx * dy];
+      for (let k = 0; k < nz; k++)
+        for (let j = 0; j < ny; j++)
+          for (let i = 0; i < nx; i++) {
+            const c = (k * ny + j) * nx + i;
+            if (this.solid[c]) continue;
+            let a = 0;
+            const q = [i, j, k];
+            const dims = [nx, ny, nz];
+            for (let axis = 0; axis < 3; axis++)
+              for (const dir of [-1, 1]) {
+                q[axis] += dir;
+                if (q[axis] >= 0 && q[axis] < dims[axis] && this.solid[(q[2] * ny + q[1]) * nx + q[0]]) a += areas[axis];
+                q[axis] -= dir;
+              }
+            if (a > 0) units.set(c, a);
+          }
+    }
+    return [...units].map(([c, area]) => ({ ...at(c), area }));
+  }
+
+  /** merged cut-cell groups: count, largest group (cells), small cells left unmerged, smallest unmerged α */
+  mergeInfo() {
+    let maxSize = 0;
+    for (const g of this.groups) maxSize = Math.max(maxSize, g.length);
+    let minAlpha = Infinity;
+    if (this.alpha) for (let c = 0; c < this.alpha.length; c++) if (!this.solid[c] && !(this.merged && this.merged[c])) minAlpha = Math.min(minAlpha, this.alpha[c]);
+    return { groups: this.groups.length, maxSize, unmergedSmall: this.unmergedSmall, minUnmergedAlpha: minAlpha };
   }
 
   /** pressure at a stationary wall from the exact wall Riemann problem; un = velocity towards the wall */
@@ -512,11 +737,19 @@ export class EulerSolver3D {
       const nz = this.ghostN[3 * g + 2];
       const vn = u * nx + v * ny + w * nz;
       const d = this.ghostPad[g];
-      R[d] = rho;
-      Pp[d] = p;
-      U[d] = u - 2 * vn * nx;
-      V[d] = v - 2 * vn * ny;
-      W[d] = w - 2 * vn * nz;
+      if (g < this.ghostSolid) {
+        R[d] = rho;
+        Pp[d] = p;
+        U[d] = u - 2 * vn * nx;
+        V[d] = v - 2 * vn * ny;
+        W[d] = w - 2 * vn * nz;
+      } else {
+        this.sr![d] = rho;
+        this.sp![d] = p;
+        this.sq[0][d] = u - 2 * vn * nx;
+        this.sq[1][d] = v - 2 * vn * ny;
+        this.sq[2][d] = w - 2 * vn * nz;
+      }
     }
   }
 
@@ -662,6 +895,22 @@ export class EulerSolver3D {
       this.fillAxis(1, bc.ymin, bc.ymax);
       this.fillAxis(2, bc.zmin, bc.zmax);
     }
+    if (this.sr) {
+      // stencil arrays: the primitive states, with reflection states at the fluid cells centred inside the body
+      this.sr.set(this.r);
+      this.sp!.set(this.p);
+      for (let d = 0; d < 3; d++) this.sq[d].set(this.q[d]);
+      this.applySphereGhosts();
+      // their domain ghost layers mirror the stencil states (swap them in for fillAxis, then back)
+      const keep = [this.r, this.p, this.q];
+      this.r = this.sr;
+      this.p = this.sp!;
+      this.q = this.sq;
+      this.fillAxis(0, bc.xmin, bc.xmax);
+      this.fillAxis(1, bc.ymin, bc.ymax);
+      this.fillAxis(2, bc.zmin, bc.zmax);
+      [this.r, this.p, this.q] = keep as [Float64Array, Float64Array, Float64Array[]];
+    }
   }
 
   // ───────── numerical flux ─────────
@@ -689,23 +938,27 @@ export class EulerSolver3D {
     const pin = this.padInactive;
     if (this.opts.order === 2 && !(pin && (pin[ll] | pin[l] | pin[r] | pin[rr]))) {
       const mm = EulerSolver3D.minmod;
-      const left = (a: Float64Array) => a[l] + 0.5 * mm(a[l] - a[ll], a[r] - a[l]);
-      const right = (a: Float64Array) => a[r] - 0.5 * mm(a[r] - a[l], a[rr] - a[r]);
-      const r2L = left(R);
-      const r2R = right(R);
-      const p2L = left(Pp);
-      const p2R = right(Pp);
+      // outer stencil points (ll, rr) come from the stencil arrays when there are any (cut cells)
+      const left = (a: Float64Array, sa: Float64Array) => a[l] + 0.5 * mm(a[l] - sa[ll], a[r] - a[l]);
+      const right = (a: Float64Array, sa: Float64Array) => a[r] - 0.5 * mm(a[r] - a[l], sa[rr] - a[r]);
+      const SR = this.sr ?? R;
+      const SP = this.sp ?? Pp;
+      const [SU, SV, SW] = this.sr ? this.sq : this.q;
+      const r2L = left(R, SR);
+      const r2R = right(R, SR);
+      const p2L = left(Pp, SP);
+      const p2R = right(Pp, SP);
       if (r2L > 0 && r2R > 0 && p2L > 0 && p2R > 0) {
         rL = r2L;
         rR = r2R;
         pL = p2L;
         pR = p2R;
-        uL = left(U);
-        uR = right(U);
-        vL = left(V);
-        vR = right(V);
-        wL = left(W);
-        wR = right(W);
+        uL = left(U, SU);
+        uR = right(U, SU);
+        vL = left(V, SV);
+        vR = right(V, SV);
+        wL = left(W, SW);
+        wR = right(W, SW);
       } else this.fallbacks++;
     }
     const unL = axis === 0 ? uL : axis === 1 ? vL : wL;
@@ -783,7 +1036,22 @@ export class EulerSolver3D {
       const ay = this.wallA[3 * w + 1];
       const az = this.wallA[3 * w + 2];
       const A = Math.hypot(ax, ay, az);
-      const un = (U[pc] * ax + V[pc] * ay + W[pc] * az) / A;
+      let un = (U[pc] * ax + V[pc] * ay + W[pc] * az) / A;
+      const d = this.wallDist.length ? this.wallDist[w] : 0;
+      if (this.opts.order === 2 && d > 0) {
+        // second-order wall state: the wall-normal velocity extrapolated to the wall with the minmod of the slope
+        // from the neighbour(s) behind (mean over tied neighbours) and the slope to the mirror state (−u_n at
+        // distance 2d), as the ghost method's MUSCL step does; ρ and p have zero mirror slope and keep their values
+        let back = 0;
+        let nn = 0;
+        for (let t = WALL_NB * w; t < WALL_NB * w + WALL_NB; t++) {
+          const nb = this.wallNb[t];
+          if (nb < 0) break;
+          back += (un - (U[nb] * ax + V[nb] * ay + W[nb] * az) / A) / this.wallD[t];
+          nn++;
+        }
+        un += d * EulerSolver3D.minmod(back / nn, -un / d);
+      }
       const pw = this.wallPressure(this.r[pc], this.p[pc], un);
       res[1][c] -= pw * ax;
       res[2][c] -= pw * ay;
@@ -864,11 +1132,44 @@ export class EulerSolver3D {
       for (let j = 0; j < ny; j++)
         for (let i = 0; i < nx; i++) {
           const c = (k * ny + j) * nx + i;
-          if (this.solid[c]) continue;
+          if (this.solid[c] || (this.merged && this.merged[c])) continue;
           const kv = (local ? this.dtCell[c] : dt) / (this.alpha ? this.alpha[c] * vol : vol);
           const pc = this.P(i, j, k);
           for (let v = 0; v < NV; v++) this.U[v][pc] = a * this.U0[v][pc] + b * (this.U[v][pc] + kv * this.res[v][c]);
         }
+    // merged groups: one state from the volume-weighted member states, the summed residual and the group Δt
+    const alpha = this.alpha!;
+    for (const g of this.groups) {
+      let va = 0;
+      let invDt = 0;
+      for (const c of g) {
+        va += alpha[c];
+        invDt += alpha[c] / this.dtCell[c];
+      }
+      // local steps: Δt_group = V_group / Σ (V_c / Δt_c) (the members' wave-speed sums add up)
+      const kv = (local ? va / invDt : dt) / (va * vol);
+      for (let v = 0; v < NV; v++) {
+        let u0 = 0;
+        let u1 = 0;
+        let rsum = 0;
+        for (const c of g) {
+          const pc = this.cellPad(c);
+          u0 += alpha[c] * this.U0[v][pc];
+          u1 += alpha[c] * this.U[v][pc];
+          rsum += this.res[v][c];
+        }
+        const val = a * (u0 / va) + b * (u1 / va + kv * rsum);
+        for (const c of g) this.U[v][this.cellPad(c)] = val;
+      }
+    }
+  }
+
+  /** padded index of interior cell index c = (k·ny + j)·nx + i */
+  private cellPad(c: number) {
+    const { nx, ny } = this.grid;
+    const i = c % nx;
+    const j = ((c - i) / nx) % ny;
+    return this.P(i, j, (c - i - j * nx) / (nx * ny));
   }
 
   /**
@@ -896,11 +1197,27 @@ export class EulerSolver3D {
     let nr = 0;
     let counted = 0;
     for (let c = 0; c < nx * ny * nz; c++) {
-      if (this.solid[c]) continue;
+      if (this.solid[c] || (this.merged && this.merged[c])) continue;
       const d2 = (this.res[0][c] / (this.alpha ? this.alpha[c] * vol : vol)) ** 2;
       s2 += d2;
       counted++;
       if (this.region && this.region[c]) {
+        r2 += d2;
+        nr++;
+      }
+    }
+    // a merged group counts once, with its summed residual (its members' own residuals need not vanish)
+    for (const g of this.groups) {
+      let rs = 0;
+      let va = 0;
+      for (const c of g) {
+        rs += this.res[0][c];
+        va += this.alpha![c];
+      }
+      const d2 = (rs / (va * vol)) ** 2;
+      s2 += d2;
+      counted++;
+      if (this.region && this.region[g[0]]) {
         r2 += d2;
         nr++;
       }

@@ -24,12 +24,17 @@ export interface SphereCaseOptions {
   wall?: 'cutcell' | 'ghost';
   /** cut cells only: reconstruction next to the body (see ImmersedSphere.reconstruction) */
   reconstruction?: 'ghost' | 'firstorder';
+  /** cut cells only: merge small cut cells (default true) */
+  merge?: boolean;
   /** sphere radius in cells (the grid is uniform: h = R / radiusCells) */
   radiusCells: number;
   /** domain extents in sphere radii: upstream of the centre, downstream of it, and laterally (y and z) */
   upstream?: number;
   downstream?: number;
   lateral?: number;
+  /** shift of the grid upstream, in cells (0 ≤ offset < 1): moves where the surface cuts the cells, e.g. whether
+   *  the cell at the nose is a sliver or nearly full (default 0) */
+  gridOffset?: number;
   cfl?: number;
   startupSteps?: number;
   maxSteps?: number;
@@ -74,6 +79,14 @@ export interface SphereCaseResult {
   boundaryFluxFraction: number;
   /** largest |ρ(i,j,k) − ρ(i,k,j)| / ρ∞ (y ↔ z mirror symmetry of the axisymmetric flow) */
   symmetryError: number;
+  /** over the fluid cells touching the front half of the body (x < 0; one entry per independent state, weighted
+   *  by wall area): mean, smallest and largest local total pressure / pitot, and the largest |T0,loc / T0 − 1|.
+   *  In inviscid flow the wall streamline is the stagnation streamline, so the exact wall values are pitot and T0
+   *  everywhere; the cells sit at a finite distance from the wall, so this measures near-wall entropy and
+   *  total-enthalpy errors over the surface rather than in one nose cell */
+  wall: { units: number; p0Mean: number; p0Min: number; p0Max: number; T0MaxError: number };
+  /** cut cells: merged groups (count, largest in cells) and small cut cells left unmerged; null for the ghost wall */
+  merge: { groups: number; maxSize: number; unmergedSmall: number } | null;
   /** the last fluid cells on the stagnation line (nearest the wall last): p / pitot, local total pressure / pitot,
    *  Mach number and fluid volume fraction (a local total-pressure deficit is entropy produced near the wall) */
   stagLine: { pRatio: number; p0Ratio: number; mach: number; alpha: number }[];
@@ -92,7 +105,8 @@ export function runSphereCase(o: SphereCaseOptions): SphereCaseResult {
   const lat = o.lateral ?? 2.5;
   const nx = Math.round((up + down) * o.radiusCells);
   const nyz = Math.round(lat * o.radiusCells);
-  const grid = makeBoxGrid(-up * R, -up * R + nx * h, 0, nyz * h, 0, nyz * h, nx, nyz, nyz);
+  const x0 = -up * R - (o.gridOffset ?? 0) * h;
+  const grid = makeBoxGrid(x0, x0 + nx * h, 0, nyz * h, 0, nyz * h, nx, nyz, nyz);
   const fs = freestream(o.mach, o.Tinf ?? 220, o.pinf ?? 2500, 0);
   const fs3 = { rho: fs.rho, u: fs.u, v: 0, w: 0, p: fs.p };
   if (o.mach <= 1) throw new Error('the sphere case uses a supersonic-inflow boundary: Mach must exceed 1');
@@ -101,7 +115,7 @@ export function runSphereCase(o: SphereCaseOptions): SphereCaseResult {
     order: 1,
     timeMode: 'local',
     freestream: fs3,
-    sphere: { cx: 0, cy: 0, cz: 0, r: R, wall: o.wall ?? 'ghost', reconstruction: o.reconstruction },
+    sphere: { cx: 0, cy: 0, cz: 0, r: R, wall: o.wall ?? 'ghost', reconstruction: o.reconstruction, merge: o.merge },
     bc: { xmin: 'inflow', xmax: 'extrapolate', ymin: 'wall', ymax: 'extrapolate', zmin: 'wall', zmax: 'extrapolate' },
     residualRegion: (x) => x < 0,
   });
@@ -196,6 +210,23 @@ export function runSphereCase(o: SphereCaseOptions): SphereCaseResult {
         if (s.isSolid(i, j, k)) continue;
         symmetryError = Math.max(symmetryError, Math.abs(s.cell(i, j, k).rho - s.cell(i, k, j).rho) / fs.rho);
       }
+  let wa = 0;
+  let p0w = 0;
+  let p0Min = Infinity;
+  let p0Max = 0;
+  let T0MaxError = 0;
+  const T0 = stagnationTemperature(fs.T, o.mach);
+  const front = s.wallUnits().filter((u) => s.centre(u.i, u.j, u.k)[0] < 0);
+  for (const u of front) {
+    const c = s.cell(u.i, u.j, u.k);
+    const p0 = (c.p * Math.pow(1 + 0.5 * (g - 1) * c.mach ** 2, g / (g - 1))) / pit;
+    wa += u.area;
+    p0w += u.area * p0;
+    p0Min = Math.min(p0Min, p0);
+    p0Max = Math.max(p0Max, p0);
+    T0MaxError = Math.max(T0MaxError, Math.abs((c.T * (1 + 0.5 * (g - 1) * c.mach ** 2)) / T0 - 1));
+  }
+  const mi = o.wall === 'cutcell' ? s.mergeInfo() : null;
   return {
     grid: { nx, ny: nyz, nz: nyz, h, cells: nx * nyz * nyz, fluidCells: s.fluidCells },
     steps: s.steps,
@@ -207,7 +238,7 @@ export function runSphereCase(o: SphereCaseOptions): SphereCaseResult {
     pStag: stag.p,
     pPitot: pitotPressure(fs.p, o.mach),
     TStag: stag.T,
-    T0: stagnationTemperature(fs.T, o.mach),
+    T0,
     standoff: (xNose - xShock) / R,
     billig: billigSphere(o.mach),
     shockWidthCells,
@@ -217,6 +248,8 @@ export function runSphereCase(o: SphereCaseOptions): SphereCaseResult {
     boundaryFluxFraction: s.boundaryMassFlux / intercepted,
     massImbalance: imbalance,
     symmetryError,
+    wall: { units: front.length, p0Mean: p0w / wa, p0Min, p0Max, T0MaxError },
+    merge: mi && { groups: mi.groups, maxSize: mi.maxSize, unmergedSmall: mi.unmergedSmall },
     stagLine,
     history,
   };
