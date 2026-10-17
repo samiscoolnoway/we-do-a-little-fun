@@ -325,13 +325,16 @@ await test('opening the app at #lab shows the lab directly', async () => {
   await m.browser.close();
 });
 
-await test('phone 390 × 844: section bar on its own row, no horizontal scroll in any section, the lab runs', async () => {
+await test('phone 390 × 844: section bar in the single top-bar row, no horizontal scroll in any section, the lab runs', async () => {
   const m = await launch({ width: 390, height: 844, mobile: true });
   const bad = watchResources(m.page);
   await ready(m.page, url);
   const over = () => m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   assert((await over()) <= 0, 'machine: horizontal overflow');
   assert(await m.page.locator(tid('nav-lab')).isVisible(), 'nav visible on phone');
+  // the section bar must not add a second row: the top bar keeps the height it had before the integration
+  const bar = await m.page.evaluate(() => document.querySelector('[data-testid="topbar"]').getBoundingClientRect().height);
+  assert(bar <= 50, `top bar is ${bar}px tall on a phone`);
   await m.page.click(tid('nav-lab'));
   await m.page.waitForFunction(() => window.__lab?.store.state.snap, null, { timeout: 30000 });
   assert((await over()) <= 0, 'lab: horizontal overflow');
