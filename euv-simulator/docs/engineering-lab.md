@@ -171,7 +171,7 @@ Its limitations:
 - **Curvature neglected:** the wall-normal pressure gradient from curvature is ignored.
 - **First-order geometry:** the surface location is only first-order accurate.
 
-A stair-stepped (voxelised) wall would be conservative, but every step would act as a small forward-facing corner. Cut cells would be better than both, but they are a larger change.
+A stair-stepped (voxelised) wall would be conservative, but every step would act as a small forward-facing corner. Experimental conservative cut cells are described in [Wall treatment: where the mass leak comes from](#wall-treatment-where-the-mass-leak-comes-from).
 
 **Case set-up:**
 
@@ -180,18 +180,19 @@ A stair-stepped (voxelised) wall would be conservative, but every step would act
 - **Domain size:** 2 R upstream, 1.5 R downstream and 2.5 R laterally of the centre.
 - **Flow:** T∞ = 220 K, p∞ = 2500 Pa.
 - **Numerics:** CFL 0.8 with local time steps; 150 first-order start-up steps, then second order (minmod).
-- **Convergence criterion:** the residual ahead of the sphere centre has dropped 4 orders.
+- **Convergence criterion:** the residual ahead of the sphere centre has dropped 4 orders, and the domain's mass balance has closed (|outer-boundary + body mass flux| < 10⁻³ of the intercepted flux, i.e. dM/dt ≈ 0).
 
 | Mach | R/h | cells | steps | p_stag / pitot | T_stag / T₀ | Δ/R (Billig) | net body mass flux | y↔z symmetry |
 |---|---|---|---|---|---|---|---|---|
-| 2 | 8 | 11 200 | 620 | 0.946 | 1.019 | 0.429 (0.321) | 6.95 % | 3e-13 |
-| 2 | 12 | 37 800 | 850 | 0.965 | 1.015 | 0.404 (0.321) | 4.41 % | 3e-10 |
-| 2 | 16 | 89 600 | 1110 | 0.976 | 1.011 | 0.394 (0.321) | 3.00 % | 1e-8 |
+| 2 | 8 | 11 200 | 642 | 0.946 | 1.019 | 0.429 (0.321) | 6.96 % | 3e-13 |
+| 2 | 12 | 37 800 | 1000 | 0.965 | 1.015 | 0.405 (0.321) | 4.41 % | 6e-10 |
+| 2 | 16 | 89 600 | 1315 | 0.976 | 1.011 | 0.394 (0.321) | 2.98 % | 5e-9 |
 | 3 | 16 | 89 600 | 732 | 0.956 | 1.017 | 0.255 (0.205) | 3.29 % | 2e-9 |
 
 Notes on the table:
 
 - **Body mass flux** is given relative to the mass flux the body intercepts, ρ∞V∞πR²/4.
+- **Mach 3 row:** run with the earlier convergence criterion (residual drop only).
 - **Convergence order:** at Mach 2 the errors fall at about first order with refinement.
 - **Standoff:** linear extrapolation of the standoff gives about 0.36 R, roughly 13 % above Billig's correlation. That is a discrepancy, not an agreement. The 2D cylinder solver shows a similar +10 % against Billig's cylinder correlation.
 - **Shock width:** the captured shock is 2.5–2.7 cells wide, so at Mach 3 the shock layer (0.2 R) spans only about 3 cells on this grid.
@@ -199,3 +200,75 @@ Notes on the table:
 - **Not compared:** drag, base flow, wake and heat transfer are not meaningful for this inviscid solver.
 
 These results verify that the method converges towards the exact references. They are not a validation, and the coarse-grid shock positions are not reliable predictions.
+
+### Wall treatment: where the mass leak comes from
+
+**Mechanism (ghost-cell wall).** The fluid cells touching the body exchange fluxes with ghost states through
+the faces of the solid staircase. Each face flux is a Rusanov flux between a fluid state and a mirrored state;
+its mass part is zero only if the face is aligned with the true surface. On a staircase it never is:
+
+- at R/h = 8, the x-facing front stair faces remove about 0.66 of the intercepted mass flux;
+- the y- and z-facing stair faces on the front return about 0.36 each;
+- the gross flux through the stair faces is 0.85–0.92 of the intercepted flux, and the net 6.96 % is the small
+  residual of these large, cancelling contributions;
+- the outer-boundary mass balance closes against it (outer + body = dM/dt ≈ 10⁻³), so mass really is created
+  at the body; it is not a measurement artefact.
+
+The leak falls at about first order (6.96 → 4.41 → 2.98 % for R/h = 8 → 12 → 16): it is the staircase
+truncation error of the wall, and only a different wall discretisation removes it.
+
+**Options compared.**
+
+| Option | Conservation | Accuracy near the wall | Stability / cost | Verdict |
+|---|---|---|---|---|
+| Subtract the measured leak from results, or rescale ghost densities to cancel the net flux | Global only, by construction | Unchanged or worse: the large cancelling face fluxes stay; a correction moves them around | Cheap | Rejected: hides the error rather than removing it |
+| Conservative cut cells (volume fractions α, face apertures β, a wall face per cut cell carrying only the wall pressure) | Exact: no mass or energy crosses the body | Depends on reconstruction and small cells (below) | Small cells need local time steps or merging; ≈ 300 lines | Implemented as an experimental option |
+| Cut cells with cell merging (α < 0.5 merged into a neighbour) | Exact | Worse in our tests: the merged nose group sits at p/pitot ≈ 0.79 | Robust time step | Tried and removed |
+| Higher-order cut-cell reconstruction (gradients at cell centroids, wall-aware limiting) | Exact | Expected to fix the near-wall entropy | Larger change, new stencils | Next milestone |
+
+**Experimental cut cells (`wall: 'cutcell'`).** Cut cells keep only their fluid part, with α and β sampled from
+the exact sphere. Each cut cell gets one wall face whose area vector closes the cell, A_w n_w = −Σ β A e_out, so
+a uniform state at rest is preserved exactly. The wall flux carries only the pressure from the exact wall Riemann
+problem. Faces whose MUSCL stencil reaches into the body read the ghost reflection states (only inside the
+stencil; faces into the body have zero aperture, so the update stays exactly conservative). Small cells are not
+merged; local time stepping handles their small stable steps.
+
+Same Mach 2 cases, same convergence criterion, on one core. The near-wall loss is 1 − p₀,loc / pitot in the
+last full cell on the stagnation line (p₀,loc = p (1 + (γ−1)/2 M²)^{γ/(γ−1)}; zero for an isentropic
+compression behind the normal shock). At R/h = 8 and 12 the cut-cell nose cell is a sliver, so the loss is taken in
+the full cell behind it; at R/h = 16 the nose cell itself is a full cell:
+
+| R/h | wall | steps | time | body flux | Δ/R (Billig 0.321) | p_stag / pitot | T_stag / T₀ | near-wall loss | y↔z symmetry |
+|---|---|---|---|---|---|---|---|---|---|
+| 8 | ghost | 642 | 6.9 s | 6.96 % | 0.429 | 0.946 | 1.019 | 3.7 % | 3e-13 |
+| 8 | cut | 631 | 8.6 s | 0 | 0.382 | 1.054 (α = 0.02) | 1.069 | 5.7 % | 2e-13 |
+| 12 | ghost | 1000 | 37.1 s | 4.41 % | 0.405 | 0.965 | 1.015 | 2.7 % | 6e-10 |
+| 12 | cut | 1004 | 47.8 s | 0 | 0.376 | 1.044 (α = 0.01) | 1.051 | 4.0 % | 7e-10 |
+| 16 | ghost | 1315 | 122.3 s | 2.98 % | 0.394 | 0.976 | 1.011 | 1.9 % | 5e-9 |
+| 16 | cut | 1326 | 150.3 s | 0 | 0.373 | 0.950 (α = 1) | 1.009 | 4.7 % | 7e-9 |
+
+What the measurements show:
+
+- **Conservation:** the cut-cell body flux is exactly zero at every resolution, and in a closed box with moving gas
+  the total mass and energy stay constant to round-off (2e-15 and 2e-14 after 60 steps; the ghost wall drifts by
+  1.3e-3 and 1.6e-3).
+- **Stability:** no failures and the same number of steps to convergence (±2 %); about 25 % more time per run
+  (the cut-cell time step and the wall faces).
+- **Standoff:** cut cells give a smaller standoff at every resolution (closer to Billig on these grids), but linear
+  extrapolation in h from R/h = 12 and 16 gives 0.361 R (ghost) and 0.364 R (cut), both 12–13 % above Billig. **The 13 % gap to Billig's correlation is not caused by the wall leak.**
+  Likely contributors are the shock capturing on 2.5 cells, the coarse grids and the correlation's own scatter.
+- **Near-wall entropy:** the cut-cell near-wall loss is 1.5 times the ghost wall's at R/h = 8 and 12 and 2.5 times at
+  R/h = 16 (4.7 % vs 1.9 %), and it does not fall steadily with refinement. With first-order faces next to the body
+  (`reconstruction: 'firstorder'`) it was 4–5 times (14.9 % at R/h = 8), so most of it is lost reconstruction
+  accuracy, not the conservation itself.
+- **Stagnation pressure:** the cut-cell nose value is worse than the ghost wall's at every resolution (+5.4 %,
+  +4.4 %, −5.0 % against −5.4 %, −3.5 %, −2.4 %); its sign depends on whether the nose cell is a sliver.
+- **Sliver cells:** when the stagnation-line cell is a sliver (α ≈ 0.01–0.02) its state overshoots the exact
+  stagnation values (p/pitot up to 1.054, T/T₀ up to 1.069): a small cell driven mostly by its wall-pressure flux,
+  with its value treated as if it sat at the cell centre. Making the sliver's faces first order removes the
+  overshoot (p/pitot 0.965) but raises the loss in its full neighbour to 15 %; merging was worse.
+
+Conclusion: cut cells remove the conservation error but, as implemented, do not give better near-wall stagnation
+values than the ghost wall. The ghost wall therefore stays the default; cut cells are an opt-in for studies where
+exact conservation matters. The next step is a proper second-order cut-cell reconstruction (gradients evaluated
+at the fluid centroids, so that slivers are not treated as full cells), measured with the same tests.

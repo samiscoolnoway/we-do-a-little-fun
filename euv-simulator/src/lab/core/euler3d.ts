@@ -25,21 +25,40 @@ import { GAS } from './gas';
  *    unchanged Cartesian fluxes then see a slip wall with the right orientation. This is not exactly conservative:
  *    the net mass flux through the body faces is measured every step (bodyMassFlux) and should be judged against
  *    the mass flux the body intercepts. It neglects the wall-normal pressure gradient from surface curvature;
+ *  - or, experimentally, the same sphere as conservative cut cells (no mass crosses the body; see ImmersedSphere);
  *  - a supersonic-inflow boundary ('inflow': the freestream state in the ghost cells, valid only where the flow
  *    entering the domain is supersonic);
  *  - local time stepping (each cell its own CFL step; only the converged steady state is meaningful).
  *
- * Not included (yet): other bodies, cut cells, subsonic far-field (characteristic) boundaries, implicit time
+ * Not included (yet): other bodies, subsonic far-field (characteristic) boundaries, implicit time
  * stepping, viscosity, turbulence, heat transfer, a Web Worker or any visualisation. It is not used by the app.
  */
 export type BC3D = 'periodic' | 'extrapolate' | 'wall' | 'inflow';
 
-/** sphere immersed in the Cartesian grid: centre and radius, m */
+/**
+ * sphere immersed in the Cartesian grid: centre and radius, m, and the wall treatment:
+ *  - 'ghost' (default): ghost-cell reflection method (not exactly conservative; see bodyMassFlux);
+ *  - 'cutcell': conservative cut cells. Cells cut by the surface keep only their fluid part (volume fraction α,
+ *    face apertures β, sampled from the exact sphere); each cut cell gets one wall face whose area vector closes
+ *    the cell, A_w n_w = −Σ β A e_out, so a uniform state at rest is preserved exactly. The wall flux carries
+ *    only the pressure from the exact wall Riemann problem (shock if the gas moves towards the wall, rarefaction
+ *    if away): no mass and no energy cross the body, by construction. Faces whose second-order stencil reaches
+ *    into the body read the ghost-cell reflection states inside the solid (reconstruction 'ghost', default) or
+ *    drop to first order ('firstorder'); either way the faces into the body have aperture 0 and carry no flux.
+ *    Cells with α < 1e-3 are dropped. Small cut cells are not merged and keep small stable time steps, so a
+ *    global time step becomes tiny: use local time stepping for steady states. EXPERIMENTAL: exactly
+ *    conservative, but on coarse grids it produces more spurious entropy next to the wall than 'ghost', and very
+ *    small cells (slivers) can overshoot the stagnation state; see docs/engineering-lab.md.
+ */
 export interface ImmersedSphere {
   cx: number;
   cy: number;
   cz: number;
   r: number;
+  wall?: 'ghost' | 'cutcell';
+  /** cut cells: second-order reconstruction next to the body using ghost reflection states in the stencil
+   *  ('ghost', default) or first order on faces whose stencil reaches into the body ('firstorder') */
+  reconstruction?: 'ghost' | 'firstorder';
 }
 
 export interface Grid3D {
@@ -147,6 +166,17 @@ export class EulerSolver3D {
   private srcW = new Float64Array(0);
   private srcFlip = new Uint8Array(0);
   private ghostN = new Float64Array(0);
+  /** cut-cell geometry (wall: 'cutcell'): fluid volume fractions, face apertures per axis, wall faces */
+  private cut = false;
+  private alpha: Float64Array | null = null;
+  private beta: Float64Array[] = [];
+  private wallCell = new Int32Array(0);
+  private wallPad = new Int32Array(0);
+  private wallA = new Float64Array(0);
+  private padInactive: Uint8Array | null = null;
+  /** net mass flux into the domain through its outer boundaries at the start of the last step, kg/s */
+  boundaryMassFlux = 0;
+  private lastBoundaryFlux = 0;
 
   constructor(grid: Grid3D, opts: Solver3DOptions) {
     const { nx, ny, nz } = grid;
@@ -177,7 +207,8 @@ export class EulerSolver3D {
     this.res = mk(NV, nx * ny * nz);
     this.solid = new Uint8Array(nx * ny * nz);
     this.dtCell = new Float64Array(nx * ny * nz);
-    if (opts.sphere) this.buildSphere(opts.sphere);
+    if (opts.sphere?.wall === 'cutcell') this.buildCutCells(opts.sphere);
+    else if (opts.sphere) this.buildSphere(opts.sphere);
     let fluid = 0;
     for (let c = 0; c < this.solid.length; c++) if (!this.solid[c]) fluid++;
     this.fluidCells = fluid;
@@ -195,6 +226,12 @@ export class EulerSolver3D {
   /** switch reconstruction order (e.g. after a first-order start-up phase) */
   setOrder(order: 1 | 2) {
     this.opts = { ...this.opts, order };
+  }
+
+  /** fluid volume fraction of a cell (1 without cut cells, 0 for solid cells) */
+  fluidFraction(i: number, j: number, k: number) {
+    const c = (k * this.grid.ny + j) * this.grid.nx + i;
+    return this.solid[c] ? 0 : this.alpha ? this.alpha[c] : 1;
   }
 
   isSolid(i: number, j: number, k: number) {
@@ -220,16 +257,17 @@ export class EulerSolver3D {
     return [Math.min(n - 1, Math.max(0, m)), flip];
   }
 
-  private buildSphere(sp: ImmersedSphere) {
+  private buildSphere(sp: ImmersedSphere, markSolid = true) {
     const { nx, ny, nz, x0, y0, z0, dx, dy, dz } = this.grid;
     const bc = this.opts.bc;
     const idx = (i: number, j: number, k: number) => (k * ny + j) * nx + i;
-    for (let k = 0; k < nz; k++)
-      for (let j = 0; j < ny; j++)
-        for (let i = 0; i < nx; i++) {
-          const [x, y, z] = this.centre(i, j, k);
-          if ((x - sp.cx) ** 2 + (y - sp.cy) ** 2 + (z - sp.cz) ** 2 < sp.r * sp.r) this.solid[idx(i, j, k)] = 1;
-        }
+    if (markSolid)
+      for (let k = 0; k < nz; k++)
+        for (let j = 0; j < ny; j++)
+          for (let i = 0; i < nx; i++) {
+            const [x, y, z] = this.centre(i, j, k);
+            if ((x - sp.cx) ** 2 + (y - sp.cy) ** 2 + (z - sp.cz) ** 2 < sp.r * sp.r) this.solid[idx(i, j, k)] = 1;
+          }
     // ghost cells: solid cells within two cells (along an axis) of a fluid cell, i.e. reached by a flux stencil
     const ghosts: number[] = [];
     for (let k = 0; k < nz; k++)
@@ -249,7 +287,10 @@ export class EulerSolver3D {
               if (a < 0 || b < 0 || c < 0 || a >= nx || b >= ny || c >= nz) continue;
               if (!this.solid[idx(a, b, c)]) near = true;
             }
-          if (near) ghosts.push(i, j, k);
+          if (!near) continue;
+          const [gx, gy, gz] = this.centre(i, j, k);
+          if ((gx - sp.cx) ** 2 + (gy - sp.cy) ** 2 + (gz - sp.cz) ** 2 >= sp.r * sp.r) continue;
+          ghosts.push(i, j, k);
         }
     const G = ghosts.length / 3;
     this.ghostPad = new Int32Array(G);
@@ -287,6 +328,161 @@ export class EulerSolver3D {
       if (wsum < 1e-6) throw new Error(`no fluid cell around the image point of ghost cell (${i}, ${j}, ${k}); refine the grid`);
       for (let c = 0; c < 8; c++) this.srcW[8 * g + c] /= wsum;
     }
+  }
+
+  /** index of the face on the low side of cell (i, j, k) along `axis` (i, j or k may equal n for the last face) */
+  private faceIndex(axis: number, i: number, j: number, k: number) {
+    const { nx, ny } = this.grid;
+    if (axis === 0) return (k * ny + j) * (nx + 1) + i;
+    if (axis === 1) return (k * (ny + 1) + j) * nx + i;
+    return (k * ny + j) * nx + i;
+  }
+
+  private buildCutCells(sp: ImmersedSphere) {
+    const { nx, ny, nz, x0, y0, z0, dx, dy, dz } = this.grid;
+    const r2 = sp.r * sp.r;
+    const fluidAt = (x: number, y: number, z: number) => (x - sp.cx) ** 2 + (y - sp.cy) ** 2 + (z - sp.cz) ** 2 >= r2;
+    const N3 = 8;
+    const N2 = 16;
+    const hd = 0.5 * Math.hypot(dx, dy, dz);
+    const alpha = new Float64Array(nx * ny * nz);
+    for (let k = 0; k < nz; k++)
+      for (let j = 0; j < ny; j++)
+        for (let i = 0; i < nx; i++) {
+          const [x, y, z] = this.centre(i, j, k);
+          const d = Math.hypot(x - sp.cx, y - sp.cy, z - sp.cz);
+          let a: number;
+          if (d - sp.r > hd) a = 1;
+          else if (sp.r - d > hd) a = 0;
+          else {
+            let n = 0;
+            for (let c = 0; c < N3; c++)
+              for (let b = 0; b < N3; b++)
+                for (let q = 0; q < N3; q++) if (fluidAt(x + ((q + 0.5) / N3 - 0.5) * dx, y + ((b + 0.5) / N3 - 0.5) * dy, z + ((c + 0.5) / N3 - 0.5) * dz)) n++;
+            a = n / N3 ** 3;
+          }
+          const ci = (k * ny + j) * nx + i;
+          if (a < 1e-3) {
+            this.solid[ci] = 1;
+            alpha[ci] = 0;
+          } else alpha[ci] = a;
+        }
+    // face apertures: fluid fraction of each face, sampled on the face; zero next to a dropped cell
+    const sizes = [(nx + 1) * ny * nz, nx * (ny + 1) * nz, nx * ny * (nz + 1)];
+    const beta = sizes.map((n) => new Float64Array(n));
+    const lens = [dx, dy, dz];
+    const org = [x0, y0, z0];
+    const dims = [nx, ny, nz];
+    for (let axis = 0; axis < 3; axis++) {
+      const [a1, a2] = axis === 0 ? [1, 2] : axis === 1 ? [0, 2] : [0, 1];
+      const hf = 0.5 * Math.hypot(lens[a1], lens[a2]);
+      const lim = [nx, ny, nz];
+      lim[axis] += 1;
+      for (let k = 0; k < lim[2]; k++)
+        for (let j = 0; j < lim[1]; j++)
+          for (let i = 0; i < lim[0]; i++) {
+            const idx = [i, j, k];
+            const m = idx[axis];
+            const centre = [0, 1, 2].map((d) => (d === axis ? org[d] + m * lens[d] : org[d] + (idx[d] + 0.5) * lens[d]));
+            const d = Math.hypot(centre[0] - sp.cx, centre[1] - sp.cy, centre[2] - sp.cz);
+            let b: number;
+            if (d - sp.r > hf) b = 1;
+            else if (sp.r - d > hf) b = 0;
+            else {
+              let n = 0;
+              const pt = centre.slice();
+              for (let u = 0; u < N2; u++)
+                for (let v = 0; v < N2; v++) {
+                  pt[a1] = centre[a1] + ((u + 0.5) / N2 - 0.5) * lens[a1];
+                  pt[a2] = centre[a2] + ((v + 0.5) / N2 - 0.5) * lens[a2];
+                  if (fluidAt(pt[0], pt[1], pt[2])) n++;
+                }
+              b = n / N2 ** 2;
+            }
+            // the cells on either side (outside the box: none)
+            const lo = idx.slice();
+            lo[axis] = m - 1;
+            const hi = idx.slice();
+            const inBox = (q: number[]) => q[axis] >= 0 && q[axis] < dims[axis];
+            const dead = (q: number[]) => inBox(q) && this.solid[(q[2] * ny + q[1]) * nx + q[0]] === 1;
+            if (dead(lo) || dead(hi)) b = 0;
+            beta[axis][this.faceIndex(axis, i, j, k)] = b;
+          }
+    }
+    // wall faces: the area vector that closes each cell, A_w n_w = −Σ_faces β A e_out (n_w points into the body)
+    const areas = [dy * dz, dx * dz, dx * dy];
+    const cells: number[] = [];
+    const vecs: number[] = [];
+    for (let k = 0; k < nz; k++)
+      for (let j = 0; j < ny; j++)
+        for (let i = 0; i < nx; i++) {
+          const ci = (k * ny + j) * nx + i;
+          if (this.solid[ci]) continue;
+          const A = [0, 0, 0];
+          for (let axis = 0; axis < 3; axis++) {
+            const hiIdx = [i, j, k];
+            hiIdx[axis] += 1;
+            const bl = beta[axis][this.faceIndex(axis, i, j, k)];
+            const bh = beta[axis][this.faceIndex(axis, hiIdx[0], hiIdx[1], hiIdx[2])];
+            A[axis] = -(bh - bl) * areas[axis];
+          }
+          if (Math.hypot(A[0], A[1], A[2]) > 1e-12 * Math.max(...areas)) {
+            cells.push(ci, this.P(i, j, k));
+            vecs.push(...A);
+          }
+        }
+    this.wallCell = Int32Array.from(cells.filter((_, q) => q % 2 === 0));
+    this.wallPad = Int32Array.from(cells.filter((_, q) => q % 2 === 1));
+    this.wallA = Float64Array.from(vecs);
+    // inactive flags on the padded grid (domain ghost layers take the flag of the cell they copy)
+    const pin = new Uint8Array(this.px * this.py * this.pz);
+    const bc = this.opts.bc;
+    for (let k = -2; k < nz + 2; k++)
+      for (let j = -2; j < ny + 2; j++)
+        for (let i = -2; i < nx + 2; i++) {
+          const outside = (m: number, n: number, lo: BC3D, hi: BC3D) => (m < 0 && lo === 'inflow') || (m >= n && hi === 'inflow');
+          if (outside(i, nx, bc.xmin, bc.xmax) || outside(j, ny, bc.ymin, bc.ymax) || outside(k, nz, bc.zmin, bc.zmax)) continue;
+          const [vi] = this.virtualIndex(i, nx, bc.xmin, bc.xmax);
+          const [vj] = this.virtualIndex(j, ny, bc.ymin, bc.ymax);
+          const [vk] = this.virtualIndex(k, nz, bc.zmin, bc.zmax);
+          pin[this.P(i, j, k)] = this.solid[(vk * ny + vj) * nx + vi];
+        }
+    this.alpha = alpha;
+    this.beta = beta;
+    this.cut = true;
+    if (sp.reconstruction !== 'firstorder') {
+      // second-order reconstruction next to the body: the solid cells reached by the stencils get the ghost-cell
+      // reflection states (used only inside the MUSCL stencil; faces into the body have aperture 0 and carry no
+      // flux, so the update stays exactly conservative)
+      this.buildSphere(sp, false);
+      const ghostSet = new Set<number>(this.ghostPad);
+      for (let q = 0; q < pin.length; q++) if (pin[q] && ghostSet.has(q)) pin[q] = 0;
+      // domain ghost layers copy their source cell's flag again
+      for (let k = -2; k < nz + 2; k++)
+        for (let j = -2; j < ny + 2; j++)
+          for (let i = -2; i < nx + 2; i++) {
+            if (i >= 0 && j >= 0 && k >= 0 && i < nx && j < ny && k < nz) continue;
+            const outside = (m: number, n: number, lo: BC3D, hi: BC3D) => (m < 0 && lo === 'inflow') || (m >= n && hi === 'inflow');
+            if (outside(i, nx, bc.xmin, bc.xmax) || outside(j, ny, bc.ymin, bc.ymax) || outside(k, nz, bc.zmin, bc.zmax)) continue;
+            const [vi] = this.virtualIndex(i, nx, bc.xmin, bc.xmax);
+            const [vj] = this.virtualIndex(j, ny, bc.ymin, bc.ymax);
+            const [vk] = this.virtualIndex(k, nz, bc.zmin, bc.zmax);
+            pin[this.P(i, j, k)] = pin[this.P(vi, vj, vk)];
+          }
+    }
+    this.padInactive = pin;
+  }
+
+  /** pressure at a stationary wall from the exact wall Riemann problem; un = velocity towards the wall */
+  private wallPressure(rho: number, p: number, un: number) {
+    const g = this.gamma;
+    const a = Math.sqrt((g * p) / rho);
+    if (un <= 0) {
+      const b = 1 + (0.5 * (g - 1) * un) / a;
+      return b > 0 ? p * Math.pow(b, (2 * g) / (g - 1)) : 0;
+    }
+    const q = 0.25 * (g + 1) * un;
+    return p + rho * un * (q + Math.sqrt(q * q + a * a));
   }
 
   /** ghost states of the immersed body from the current fluid primitives (fluid sources only: order-independent) */
@@ -490,7 +686,8 @@ export class EulerSolver3D {
       vR = V[r],
       wL = W[l],
       wR = W[r];
-    if (this.opts.order === 2) {
+    const pin = this.padInactive;
+    if (this.opts.order === 2 && !(pin && (pin[ll] | pin[l] | pin[r] | pin[rr]))) {
       const mm = EulerSolver3D.minmod;
       const left = (a: Float64Array) => a[l] + 0.5 * mm(a[l] - a[ll], a[r] - a[l]);
       const right = (a: Float64Array) => a[r] - 0.5 * mm(a[r] - a[l], a[rr] - a[r]);
@@ -541,10 +738,13 @@ export class EulerSolver3D {
     const offsets = [1, nx, nx * ny];
     const areas = [dy * dz, dx * dz, dx * dy];
     let body = 0;
+    let boundary = 0;
+    const cut = this.cut;
     for (let axis = 0; axis < 3; axis++) {
       const s = strides[axis];
       const n = dims[axis];
       const off = offsets[axis];
+      const beta = cut ? this.beta[axis] : null;
       for (let k = 0; k < nz; k++)
         for (let j = 0; j < ny; j++)
           for (let i = 0; i < nx; i++) {
@@ -554,19 +754,43 @@ export class EulerSolver3D {
             const pc = this.P(i, j, k);
             const sc = solid[c];
             const sl = m > 0 ? solid[c - off] : sc;
-            if (!(sc && sl)) {
-              this.faceFlux(axis, pc - 2 * s, pc - s, pc, pc + s, areas[axis]);
+            const bLow = beta ? beta[this.faceIndex(axis, i, j, k)] : 1;
+            if (!(sc && sl) && bLow > 0) {
+              this.faceFlux(axis, pc - 2 * s, pc - s, pc, pc + s, areas[axis] * bLow);
               if (!sc) for (let v = 0; v < NV; v++) res[v][c] += f[v];
               if (m > 0 && !sl) for (let v = 0; v < NV; v++) res[v][c - off] -= f[v];
               if (m > 0 && sc !== sl) body += sc ? -f[0] : f[0];
+              if (m === 0 && !sc) boundary += f[0];
             }
             if (m === n - 1 && !sc) {
-              this.faceFlux(axis, pc - s, pc, pc + s, pc + 2 * s, areas[axis]);
-              for (let v = 0; v < NV; v++) res[v][c] -= f[v];
+              const hiIdx = [i, j, k];
+              hiIdx[axis] += 1;
+              const bHigh = beta ? beta[this.faceIndex(axis, hiIdx[0], hiIdx[1], hiIdx[2])] : 1;
+              if (bHigh > 0) {
+                this.faceFlux(axis, pc - s, pc, pc + s, pc + 2 * s, areas[axis] * bHigh);
+                for (let v = 0; v < NV; v++) res[v][c] -= f[v];
+                boundary -= f[0];
+              }
             }
           }
     }
+    // cut-cell wall faces: pressure only (no mass, no energy through the body)
+    const [U, V, W] = this.q;
+    for (let w = 0; w < this.wallCell.length; w++) {
+      const c = this.wallCell[w];
+      const pc = this.wallPad[w];
+      const ax = this.wallA[3 * w];
+      const ay = this.wallA[3 * w + 1];
+      const az = this.wallA[3 * w + 2];
+      const A = Math.hypot(ax, ay, az);
+      const un = (U[pc] * ax + V[pc] * ay + W[pc] * az) / A;
+      const pw = this.wallPressure(this.r[pc], this.p[pc], un);
+      res[1][c] -= pw * ax;
+      res[2][c] -= pw * ay;
+      res[3][c] -= pw * az;
+    }
     this.lastBodyFlux = body;
+    this.lastBoundaryFlux = boundary;
   }
 
   /** global CFL time step from the current primitive arrays */
@@ -588,7 +812,43 @@ export class EulerSolver3D {
           if (s > smax) smax = s;
         }
       }
-    return cfl / smax;
+    if (!this.cut) return cfl / smax;
+    // cut cells: Δt = CFL · αV / (½ Σ_faces (|u·e| + a) β A + ½ (|u·n_w| + a) A_w)
+    const areas = [dy * dz, dx * dz, dx * dy];
+    const vol = dx * dy * dz;
+    const alpha = this.alpha!;
+    const wallIdx = new Map<number, number>();
+    for (let w = 0; w < this.wallCell.length; w++) wallIdx.set(this.wallCell[w], w);
+    let dmin = Infinity;
+    for (let k = 0; k < nz; k++)
+      for (let j = 0; j < ny; j++)
+        for (let i = 0; i < nx; i++) {
+          const ci = (k * ny + j) * nx + i;
+          if (this.solid[ci]) continue;
+          if (alpha[ci] < 1) {
+            const c = this.P(i, j, k);
+            const a = Math.sqrt((g * this.p[c]) / this.r[c]);
+            const vel = [U[c], V[c], W[c]];
+            let s = 0;
+            for (let axis = 0; axis < 3; axis++) {
+              const hiIdx = [i, j, k];
+              hiIdx[axis] += 1;
+              const b = this.beta[axis][this.faceIndex(axis, i, j, k)] + this.beta[axis][this.faceIndex(axis, hiIdx[0], hiIdx[1], hiIdx[2])];
+              s += b * areas[axis] * (Math.abs(vel[axis]) + a);
+            }
+            const w = wallIdx.get(ci);
+            if (w !== undefined) {
+              const ax = this.wallA[3 * w];
+              const ay = this.wallA[3 * w + 1];
+              const az = this.wallA[3 * w + 2];
+              const A = Math.hypot(ax, ay, az);
+              s += Math.abs(vel[0] * ax + vel[1] * ay + vel[2] * az) + a * A;
+            }
+            this.dtCell[ci] = (cfl * alpha[ci] * vol) / (0.5 * s);
+          }
+          if (this.dtCell[ci] < dmin) dmin = this.dtCell[ci];
+        }
+    return dmin;
   }
 
   private copyState(src: Float64Array[], dst: Float64Array[]) {
@@ -605,7 +865,7 @@ export class EulerSolver3D {
         for (let i = 0; i < nx; i++) {
           const c = (k * ny + j) * nx + i;
           if (this.solid[c]) continue;
-          const kv = (local ? this.dtCell[c] : dt) / vol;
+          const kv = (local ? this.dtCell[c] : dt) / (this.alpha ? this.alpha[c] * vol : vol);
           const pc = this.P(i, j, k);
           for (let v = 0; v < NV; v++) this.U[v][pc] = a * this.U0[v][pc] + b * (this.U[v][pc] + kv * this.res[v][c]);
         }
@@ -629,20 +889,23 @@ export class EulerSolver3D {
     }
     this.computeResidual();
     this.bodyMassFlux = this.lastBodyFlux;
+    this.boundaryMassFlux = this.lastBoundaryFlux;
     const vol = dx * dy * dz;
     let s2 = 0;
     let r2 = 0;
     let nr = 0;
+    let counted = 0;
     for (let c = 0; c < nx * ny * nz; c++) {
       if (this.solid[c]) continue;
-      const d2 = (this.res[0][c] / vol) ** 2;
+      const d2 = (this.res[0][c] / (this.alpha ? this.alpha[c] * vol : vol)) ** 2;
       s2 += d2;
+      counted++;
       if (this.region && this.region[c]) {
         r2 += d2;
         nr++;
       }
     }
-    const residual = Math.sqrt(s2 / this.fluidCells);
+    const residual = Math.sqrt(s2 / counted);
     const residualRegion = nr ? Math.sqrt(r2 / nr) : NaN;
     this.copyState(this.U, this.U0);
     this.update(dt, 0, 1); // U1 = Un + Δt R(Un)
@@ -687,7 +950,8 @@ export class EulerSolver3D {
         for (let i = 0; i < nx; i++) {
           if (this.solid[(k * ny + j) * nx + i]) continue;
           const c = this.P(i, j, k);
-          for (let v = 0; v < NV; v++) t[v] += this.U[v][c] * vol;
+          const w = this.alpha ? this.alpha[(k * ny + j) * nx + i] * vol : vol;
+          for (let v = 0; v < NV; v++) t[v] += this.U[v][c] * w;
         }
     return { mass: t[0], momX: t[1], momY: t[2], momZ: t[3], energy: t[4] };
   }

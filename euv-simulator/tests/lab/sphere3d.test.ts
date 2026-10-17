@@ -1,7 +1,7 @@
 import { EulerSolver3D, makeBoxGrid } from '../../src/lab/core/euler3d';
 import { billigSphere, runSphereCase } from '../../src/lab/core/sphere3d';
 
-// Immersed sphere (ghost-cell reflection method) in the 3D Euler prototype. Exact checks first (rest state,
+// Immersed sphere (ghost-cell reflection method, the default wall) in the 3D Euler prototype. Exact checks first (rest state,
 // geometry), then the Mach 2 sphere against the exact references (pitot pressure, stagnation temperature,
 // symmetry, undisturbed flow ahead of the shock) and against Billig's empirical standoff correlation.
 // These verify the implementation and show its accuracy on coarse grids; they are not a validation.
@@ -43,15 +43,15 @@ describe('immersed sphere: exact properties', () => {
   });
 });
 
-describe('Mach 2 sphere, quarter domain with symmetry planes', () => {
+describe('Mach 2 sphere, ghost-cell wall (baseline), quarter domain with symmetry planes', () => {
   // Measured (Mach 2, T∞ = 220 K, p∞ = 2500 Pa, CFL 0.8, local time steps, 150 first-order start-up steps,
-  // convergence = 4-order drop of the residual ahead of the sphere centre):
-  //   R/h =  8: 11 200 cells,  620 steps; p/pitot 0.946, T/T0 1.019, Δ/R 0.429 (Billig 0.321), body flux 6.95 %
-  //   R/h = 12: 37 800 cells,  850 steps; p/pitot 0.965, T/T0 1.015, Δ/R 0.404, body flux 4.41 %
-  //   R/h = 16: 89 600 cells, 1110 steps; p/pitot 0.976, T/T0 1.011, Δ/R 0.394, body flux 3.00 %
+  // convergence = 4-order drop of the residual ahead of the sphere centre and a closed mass balance):
+  //   R/h =  8: 11 200 cells,  642 steps; p/pitot 0.946, T/T0 1.019, Δ/R 0.429 (Billig 0.321), body flux 6.96 %
+  //   R/h = 12: 37 800 cells, 1000 steps; p/pitot 0.965, T/T0 1.015, Δ/R 0.405, body flux 4.41 %
+  //   R/h = 16: 89 600 cells, 1315 steps; p/pitot 0.976, T/T0 1.011, Δ/R 0.394, body flux 2.98 %
   // Errors fall at about first order. Tolerances below sit just outside the R/h = 8 values (regression guards),
   // and the refinement test requires every error to shrink.
-  const coarse = runSphereCase({ mach: 2, radiusCells: 8 });
+  const coarse = runSphereCase({ mach: 2, radiusCells: 8, wall: 'ghost' });
 
   it('converges: the residual ahead of the sphere drops 4 orders; no invalid states', () => {
     expect(coarse.failure).toBeNull();
@@ -81,7 +81,7 @@ describe('Mach 2 sphere, quarter domain with symmetry planes', () => {
   });
 
   it('refinement R/h = 8 → 10: pitot, temperature, standoff and body-flux errors all decrease', () => {
-    const fine = runSphereCase({ mach: 2, radiusCells: 10 });
+    const fine = runSphereCase({ mach: 2, radiusCells: 10, wall: 'ghost' });
     expect(fine.converged).toBe(true);
     expect(Math.abs(fine.pStag / fine.pPitot - 1)).toBeLessThan(Math.abs(coarse.pStag / coarse.pPitot - 1));
     expect(Math.abs(fine.TStag / fine.T0 - 1)).toBeLessThan(Math.abs(coarse.TStag / coarse.T0 - 1));

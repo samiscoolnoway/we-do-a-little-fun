@@ -16,9 +16,14 @@ import { freestream, normalShock, pitotPressure, stagnationTemperature } from '.
  *  - bow-shock standoff vs Billig's correlation for spheres, Δ/R = 0.143 exp(3.24/M²) (F. S. Billig,
  *    J. Spacecraft Rockets 4(6), 1967): an empirical fit to experiments, not exact theory.
  * Not meaningful here: drag, base pressure and the wake (no viscosity, so no physical separation), heat transfer.
+ * Wall treatment: the ghost-cell method by default; 'cutcell' selects the experimental conservative cut cells.
  */
 export interface SphereCaseOptions {
   mach: number;
+  /** wall treatment: the ghost-cell reflection method (default) or experimental conservative cut cells */
+  wall?: 'cutcell' | 'ghost';
+  /** cut cells only: reconstruction next to the body (see ImmersedSphere.reconstruction) */
+  reconstruction?: 'ghost' | 'firstorder';
   /** sphere radius in cells (the grid is uniform: h = R / radiusCells) */
   radiusCells: number;
   /** domain extents in sphere radii: upstream of the centre, downstream of it, and laterally (y and z) */
@@ -28,8 +33,11 @@ export interface SphereCaseOptions {
   cfl?: number;
   startupSteps?: number;
   maxSteps?: number;
-  /** stop when the residual ahead of the sphere centre (x < 0) has dropped this many orders of magnitude */
+  /** stop when the residual ahead of the sphere centre (x < 0) has dropped this many orders of magnitude … */
   residualDrop?: number;
+  /** … and the domain's mass balance has closed: |outer-boundary + body mass flux| below this fraction of the
+   *  mass flux the body intercepts (a steady state has dM/dt = 0) */
+  massBalanceTol?: number;
   Tinf?: number;
   pinf?: number;
 }
@@ -38,6 +46,8 @@ export interface SphereCaseResult {
   grid: { nx: number; ny: number; nz: number; h: number; cells: number; fluidCells: number };
   steps: number;
   converged: boolean;
+  /** |outer-boundary + body mass flux| / intercepted mass flux at the end (dM/dt; → 0 in a steady state) */
+  massImbalance: number;
   /** orders of magnitude the residual (x < 0 region / whole domain) dropped below its largest early value */
   dropFront: number;
   dropAll: number;
@@ -59,8 +69,14 @@ export interface SphereCaseResult {
   /** net body mass flux (immersed-boundary conservation error) relative to the mass flux the quarter sphere
    *  intercepts, ρ∞ V∞ π R² / 4 */
   bodyFluxFraction: number;
+  /** net mass flux into the domain through its outer boundaries, same normalisation; in a converged steady state
+   *  it balances the body flux (outer + body = dM/dt ≈ 0) */
+  boundaryFluxFraction: number;
   /** largest |ρ(i,j,k) − ρ(i,k,j)| / ρ∞ (y ↔ z mirror symmetry of the axisymmetric flow) */
   symmetryError: number;
+  /** the last fluid cells on the stagnation line (nearest the wall last): p / pitot, local total pressure / pitot,
+   *  Mach number and fluid volume fraction (a local total-pressure deficit is entropy produced near the wall) */
+  stagLine: { pRatio: number; p0Ratio: number; mach: number; alpha: number }[];
   /** residual history (front region) for reporting */
   history: number[];
 }
@@ -85,7 +101,7 @@ export function runSphereCase(o: SphereCaseOptions): SphereCaseResult {
     order: 1,
     timeMode: 'local',
     freestream: fs3,
-    sphere: { cx: 0, cy: 0, cz: 0, r: R },
+    sphere: { cx: 0, cy: 0, cz: 0, r: R, wall: o.wall ?? 'ghost', reconstruction: o.reconstruction },
     bc: { xmin: 'inflow', xmax: 'extrapolate', ymin: 'wall', ymax: 'extrapolate', zmin: 'wall', zmax: 'extrapolate' },
     residualRegion: (x) => x < 0,
   });
@@ -93,6 +109,9 @@ export function runSphereCase(o: SphereCaseOptions): SphereCaseResult {
   const startup = o.startupSteps ?? 150;
   const maxSteps = o.maxSteps ?? 4000;
   const target = o.residualDrop ?? 4;
+  const massTol = o.massBalanceTol ?? 1e-3;
+  const intercepted = fs.rho * fs.V * Math.PI * R * R * 0.25;
+  let imbalance = Infinity;
   let refFront = 0;
   let refAll = 0;
   let dropFront = 0;
@@ -111,7 +130,8 @@ export function runSphereCase(o: SphereCaseOptions): SphereCaseResult {
     }
     dropFront = Math.log10(refFront / r.residualRegion);
     dropAll = Math.log10(refAll / r.residual);
-    if (n > startup + 20 && dropFront >= target) {
+    imbalance = Math.abs(s.boundaryMassFlux + s.bodyMassFlux) / intercepted;
+    if (n > startup + 20 && dropFront >= target && imbalance < massTol) {
       converged = true;
       break;
     }
@@ -125,6 +145,12 @@ export function runSphereCase(o: SphereCaseOptions): SphereCaseResult {
     iNose = i;
   }
   const stag = s.cell(iNose, 0, 0);
+  const pit = pitotPressure(fs.p, o.mach);
+  const g = 1.4;
+  const stagLine = [iNose - 2, iNose - 1, iNose].filter((i) => i >= 0).map((i) => {
+    const c = s.cell(i, 0, 0);
+    return { pRatio: c.p / pit, p0Ratio: (c.p * Math.pow(1 + 0.5 * (g - 1) * c.mach ** 2, g / (g - 1))) / pit, mach: c.mach, alpha: s.fluidFraction(i, 0, 0) };
+  });
   const rho2 = fs.rho * normalShock(o.mach).r21;
   const mid = 0.5 * (fs.rho + rho2);
   let xShock = NaN;
@@ -187,8 +213,11 @@ export function runSphereCase(o: SphereCaseOptions): SphereCaseResult {
     shockWidthCells,
     upstreamDeviation,
     upstreamDeviationAt,
-    bodyFluxFraction: s.bodyMassFlux / (fs.rho * fs.V * Math.PI * R * R * 0.25),
+    bodyFluxFraction: s.bodyMassFlux / intercepted,
+    boundaryFluxFraction: s.boundaryMassFlux / intercepted,
+    massImbalance: imbalance,
     symmetryError,
+    stagLine,
     history,
   };
 }
