@@ -28,6 +28,8 @@ export interface AppState {
   snap: SnapshotMessage | null;
   /** the worker is iterating */
   running: boolean;
+  /** Pause was sent and the worker has not confirmed it yet (snapshots already in flight may still arrive) */
+  pausePending: boolean;
   error: string | null;
   view: ViewOptions;
   probe: { x: number; y: number } | null;
@@ -60,6 +62,7 @@ export class Store {
       mesh: null,
       snap: null,
       running: false,
+      pausePending: false,
       error: null,
       view: { field: 'mach', smooth: true, mesh: false, vectors: false, streamlines: true },
       probe: null,
@@ -95,7 +98,9 @@ export class Store {
     if (m.runId !== this.state.runId) return;
     if (m.type === 'mesh') this.set({ mesh: m });
     else if (m.type === 'snapshot') {
-      this.set({ snap: m, running: m.running });
+      // a snapshot posted before the worker processed Pause must not switch the UI back to "running"
+      if (this.state.pausePending) this.set({ snap: m, running: false, pausePending: m.running });
+      else this.set({ snap: m, running: m.running });
       const ex = this.state.experiment;
       if (ex && !m.running && TERMINAL.has(m.diag.status)) {
         this.record(ex.queue[ex.index].name);
@@ -160,7 +165,7 @@ export class Store {
   private init(config: SimConfig) {
     const runId = this.state.runId + 1;
     const run = cloneConfig(config);
-    this.set({ run, runId, snap: null, mesh: null, running: false, error: null });
+    this.set({ run, runId, snap: null, mesh: null, running: false, pausePending: false, error: null });
     this.post({ type: 'init', runId, config: run });
   }
 
@@ -174,12 +179,12 @@ export class Store {
     const d = this.state.snap?.diag;
     if (d && d.status !== 'ready' && d.status !== 'running') this.post({ type: 'continue' });
     else this.post({ type: 'run' });
-    this.set({ running: true });
+    this.set({ running: true, pausePending: false });
   }
 
   pause() {
     this.post({ type: 'pause' });
-    this.set({ running: false });
+    this.set({ running: false, pausePending: true });
   }
 
   step(n = 1) {

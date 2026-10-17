@@ -117,3 +117,18 @@ describe('run / reset / restart semantics', () => {
     expect(w.sent.at(-1)).toEqual({ type: 'continue' });
   });
 });
+
+describe('pause acknowledgement', () => {
+  it('a snapshot already in flight when Pause is pressed does not switch the UI back to running', () => {
+    const { s, w } = boot();
+    s.runSim();
+    s.pause();
+    w.reply(snapshot(1, 40, 'running', true)); // posted by the worker before it saw Pause
+    expect(s.state.running).toBe(false);
+    expect(s.state.pausePending).toBe(true);
+    expect(s.state.snap?.diag.steps).toBe(40);
+    w.reply(snapshot(1, 41, 'running', false)); // the worker's reply to Pause
+    expect(s.state.pausePending).toBe(false);
+    expect(s.state.running).toBe(false);
+  });
+});

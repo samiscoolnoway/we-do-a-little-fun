@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host 127.0.0.1 --port 4174"
+    "preview": "vite preview --host 127.0.0.1 --port 4174",
+    "test:e2e": "node tests/e2e/e2e.mjs"
   },
   "dependencies": {
     "react": "^19.0.0",
