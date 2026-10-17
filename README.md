@@ -27,7 +27,9 @@
 A modern chip is printed with light of **13.5 nanometres**, made by hitting molten tin droplets with a laser
 **50,000 times a second**, bounced off mirrors polished to atomic smoothness, and focused onto a silicon wafer.
 This project lets you walk through that whole machine, take it apart piece by piece, run the process stage by
-stage, and then zoom into the finished wafer all the way down to a single transistor.
+stage, and then zoom into the finished wafer all the way down to a single transistor. A third section, the
+**Engineering & Computational Science Lab**, runs a real computational-fluid-dynamics and heat-transfer solver in
+the browser.
 
 It is an **educational model**: geometry and numbers are simplified, rounded public values, not ASML designs or
 CAD data. EUV light is invisible; the colours are a visualisation aid.
@@ -108,6 +110,28 @@ you are looking at.
 </tr>
 </table>
 
+### 5 · Engineering & Computational Science Lab
+
+The top bar switches between three sections: **ASML EUV Machine**, **Wafer & Transistor Explorer** and
+**Engineering Lab**. The lab (AeroThermo Lab) is a separate educational experiment in aerothermodynamics: air
+flowing past a blunt heat shield. It is not a model of the scanner. A finite-volume solver for the compressible
+Euler equations runs in a Web Worker. A boundary-layer correlation turns the computed flow into surface heating,
+and an implicit solver follows that heat into the shield.
+
+- **Solver controls:** Run, pause, step, reset and restart.
+- **Inspecting results:**
+  - a probe that reads computed cell values;
+  - live convergence diagnostics;
+  - experiments with a comparison table and CSV/JSON export.
+- **Learning:** explanations at three levels and predict-run-compare activities.
+- **Stated limits:** every result is shown with its assumptions, sources and validity limits (the flow solver is inviscid; the heating correlation is laminar).
+
+Its *About* tab connects the computational methods to engineering problems that semiconductor equipment shares,
+such as heat transfer, temperature and dimensional stability, and cooling flows, without claiming to model any
+real machine. Details and verification: [`euv-simulator/docs/engineering-lab.md`](euv-simulator/docs/engineering-lab.md).
+
+<img src="euv-simulator/docs/images/engineering-lab.jpg" alt="The Engineering Lab: Mach 6 flow around a heat shield with streamlines, and the surface-heating tab" width="100%">
+
 ### And more
 
 - **Science panel** with an inspector for every part (physics, chemistry, equations, and what is real versus simplified), 12 concepts at three levels, and a 15-question quiz.
@@ -145,6 +169,8 @@ npm run dev               # http://localhost:5173
 npm run build             # type-check + production build + single-file build in dist/
 npm run test:e2e          # 56 end-to-end tests (Playwright, headless Chromium)
 npm run test:standalone   # the single-file builds start and draw the scene
+npm test                  # unit and verification tests of the Engineering Lab (Vitest)
+npm run test:lab-e2e      # the three sections and the lab, end to end
 ```
 
 ## How it's built
@@ -177,13 +203,15 @@ Not affiliated with or endorsed by ASML. All numbers are rounded public values, 
 ```
 euv-simulator/
 ├── download/   EUV-Lithography-Simulator.html: the whole app in one file
-├── docs/       screenshots used in this README
+├── docs/       screenshots used in this README; engineering-lab.md (the lab's models and verification)
 ├── src/
 │   ├── data/   stages, components, concepts, quiz, labels, chip-explorer content
 │   ├── scene/  Three.js scene: machine, casing, optics, wafer, resist, chip explorer
 │   ├── store/  the simulation store
-│   └── ui/     React interface
-└── tests/      end-to-end tests
+│   ├── ui/     React interface (top bar with the section bar)
+│   ├── nav.ts  the three sections and the URL hash
+│   └── lab/    Engineering & Computational Science Lab: solver core, worker, visualisation, UI
+└── tests/      end-to-end tests; tests/lab/ unit tests of the lab
 ```
 
 `main` holds the latest version. Development happens on `claude/euv-lithography-simulator`, and

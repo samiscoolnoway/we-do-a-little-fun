@@ -603,3 +603,23 @@ input[type='range']::-moz-range-thumb { width: 12px; height: 12px; border-radius
   .tw-caret { animation: none; }
   .lbl, .leader, .anchor, .sel-box { transition: none; }
 }
+
+/* ───────────────── section navigation (machine · wafer explorer · engineering lab) ───────────────── */
+.section-nav { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-0); flex: none; }
+.section-nav button {
+  padding: 6px 11px; border: 1px solid transparent; border-radius: var(--radius); background: transparent; color: var(--fg-2);
+  font: 500 12.5px/1.1 var(--font-cond); letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap;
+}
+.section-nav button:hover { background: var(--bg-3); color: var(--fg); }
+.section-nav button[aria-current='page'] { color: #fff; background: var(--accent-bg); border-color: var(--accent-2); }
+.section-nav .sn-short { display: none; }
+.dock-slot { flex: none; }
+@media (max-width: 1400px) {
+  .section-nav .sn-long { display: none; }
+  .section-nav .sn-short { display: inline; }
+}
+@media (max-width: 900px) {
+  .topbar { flex-wrap: wrap; row-gap: 6px; }
+  .section-nav { order: 10; flex-basis: 100%; }
+  .section-nav button { flex: 1 1 0; }
+}

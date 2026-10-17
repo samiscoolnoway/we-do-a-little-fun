@@ -6,6 +6,28 @@ import { ZONE_COLOR } from './controls';
 import { IconChevron, IconFlask, IconPanel, Logo } from './icons';
 import { InspectToolbar } from './Explore';
 import { ChipToolbar, FinishedWaferButton } from './Chip';
+import { nav, type Section, useSection } from '../nav';
+
+const SECTIONS: { id: Section; long: string; short: string; title: string }[] = [
+  { id: 'machine', long: 'ASML EUV Machine', short: 'Machine', title: 'The EUV scanner: machine, components and process stages' },
+  { id: 'explorer', long: 'Wafer & Transistor Explorer', short: 'Wafer', title: 'Zoom from the finished wafer down to a single transistor' },
+  { id: 'lab', long: 'Engineering Lab', short: 'Lab', title: 'Computational fluid dynamics and heat-transfer lab (AeroThermo Lab)' },
+];
+
+/** switch between the three sections of the application */
+export function SectionNav() {
+  const section = useSection();
+  return (
+    <nav className="section-nav" aria-label="Sections" data-testid="section-nav">
+      {SECTIONS.map((s) => (
+        <button key={s.id} type="button" aria-label={s.id === 'lab' ? 'Engineering & Computational Science Lab' : s.long} aria-current={section === s.id ? 'page' : undefined} title={s.title} onClick={() => nav.go(s.id)} data-testid={`nav-${s.id}`}>
+          <span className="sn-long">{s.long}</span>
+          <span className="sn-short">{s.short}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
 
 export function TopBar() {
   const stage = useSim((s) => s.stage);
@@ -14,8 +36,9 @@ export function TopBar() {
   const closed = useSim((s) => s.casing === 'closed');
   const inspect = useSim((s) => s.inspect);
   const chip = useSim((s) => !!s.chip);
+  const lab = useSection() === 'lab';
   const st = STAGES[stage];
-  const badge = chip ? 'Finished wafer · chip explorer' : inspect ? 'Isolated inspection' : closed ? 'Machine exterior' : st.inScanner ? 'Inside the EUV scanner' : st.zone === 'etch' ? 'Outside the scanner · etch tool' : 'Outside the scanner · track';
+  const badge = lab ? 'Engineering lab · separate aerothermodynamics experiment' : chip ? 'Finished wafer · chip explorer' : inspect ? 'Isolated inspection' : closed ? 'Machine exterior' : st.inScanner ? 'Inside the EUV scanner' : st.zone === 'etch' ? 'Outside the scanner · etch tool' : 'Outside the scanner · track';
   return (
     <header className="topbar" data-testid="topbar">
       <div className="brand">
@@ -25,15 +48,16 @@ export function TopBar() {
           <span className="brand-sub">Educational model of a scanner and the wafer steps after it</span>
         </div>
       </div>
-      <span className={`zone-badge${st.inScanner ? '' : ' out'}`} style={{ ['--zc' as string]: ZONE_COLOR[st.zone] }} data-testid="zone-badge">
+      <SectionNav />
+      <span className={`zone-badge${st.inScanner || lab ? '' : ' out'}`} style={{ ['--zc' as string]: lab ? 'var(--c-resist)' : ZONE_COLOR[st.zone] }} data-testid="zone-badge">
         <i />
         {badge}
       </span>
       <div className="top-spacer" />
-      <button type="button" className="btn btn-deep" aria-pressed={deep} aria-label="Deep Science" onClick={() => sim.toggleDeep()} title="Reveal advanced explanations (D)" data-testid="btn-deep">
+      <button hidden={lab} type="button" className="btn btn-deep" aria-pressed={deep} aria-label="Deep Science" onClick={() => sim.toggleDeep()} title="Reveal advanced explanations (D)" data-testid="btn-deep">
         <IconFlask size={16} /> <span className="btn-label">Deep Science</span>
       </button>
-      <button type="button" className="btn" aria-pressed={open} aria-label="Science panel" onClick={() => sim.togglePanel()} title="Science panel" data-testid="btn-panel">
+      <button hidden={lab} type="button" className="btn" aria-pressed={open} aria-label="Science panel" onClick={() => sim.togglePanel()} title="Science panel" data-testid="btn-panel">
         <IconPanel size={16} /> <span className="btn-label">Science</span>
       </button>
     </header>

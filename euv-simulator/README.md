@@ -11,6 +11,11 @@ React 19 + Three.js (plain, no react-three-fiber) + TypeScript + Vite.
 > and the magenta plasma. Several distances and brightnesses are deliberately exaggerated
 > (for example how quickly EUV fades in air, or how bright each mirror reflection looks).
 
+The app has three sections, chosen in the top bar: the **ASML EUV Machine**, the **Wafer & Transistor Explorer** and
+the **Engineering & Computational Science Lab**, a computational fluid dynamics and heat-transfer lab
+(AeroThermo Lab) with a real finite-volume solver. The lab is a separate educational aerothermodynamics
+experiment, not a model of the scanner; see [docs/engineering-lab.md](docs/engineering-lab.md).
+
 ## What it shows
 
 **The machine first.** The app opens on the closed machine: a stylised exterior with cabinets for the drive
@@ -122,6 +127,8 @@ npm run dev          # http://localhost:5173
 npm run build        # type-check, production build in dist/, plus dist/standalone.html (one file)
 npm run test:e2e     # end-to-end checks against dist/ (see below)
 npm run test:standalone   # checks that the single-file builds start and draw the scene
+npm test             # unit and verification tests of the Engineering Lab (Vitest)
+npm run test:lab-e2e # end-to-end checks of the three sections and the lab against dist/
 ```
 
 The tests use Playwright with Chromium (`PLAYWRIGHT_MODULE` can point at an installed copy; see `tests/lib.mjs`).
@@ -217,7 +224,9 @@ src/data/      stages, components (info panels), concepts, quiz, labels, geometr
 src/scene/     Three.js scene: casing, support systems, source, optics, wafer, resist slab, tracks/etch, labels, picking
 src/scene/chip/  finished wafer and chip explorer: wafer model, box models (circuit region, NAND2 cell), transitions
 src/store/     the simulation store (time, stage, view, tone, dose, selection, panel)
-src/ui/        React UI: top bar, stage card, exterior + inspection cards (Explore.tsx), chip explorer (Chip.tsx), dock/timeline, panel, widgets
+src/ui/        React UI: top bar with the section bar, stage card, exterior + inspection cards (Explore.tsx), chip explorer (Chip.tsx), dock/timeline, panel, widgets
+src/nav.ts     the three sections (machine, explorer, lab) and the URL hash
+src/lab/       Engineering & Computational Science Lab: solver core, worker, visualisation, UI (docs/engineering-lab.md)
 scripts/       make-standalone.mjs (single-file build)
-tests/         end-to-end tests and screenshot helpers (Playwright)
+tests/         end-to-end tests and screenshot helpers (Playwright); tests/lab/ unit tests of the lab (Vitest)
 ```

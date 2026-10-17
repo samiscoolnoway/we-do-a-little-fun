@@ -257,6 +257,8 @@ export class SceneController {
   }
 
   private resize() {
+    // hidden (another section of the app is open): keep the current size and framing until it is shown again
+    if (this.host.clientWidth === 0 && this.host.clientHeight === 0) return;
     const w = Math.max(1, this.host.clientWidth);
     const h = Math.max(1, this.host.clientHeight);
     this.width = w;
@@ -880,6 +882,11 @@ export class SceneController {
   private frame = (nowMs: number, once = false) => {
     if (this.disposed) return;
     if (!once) this.raf = requestAnimationFrame(this.frame);
+    // hidden while another section of the app is open: no simulation ticks and no rendering
+    if (!once && this.host.clientWidth === 0 && this.host.clientHeight === 0) {
+      this.last = nowMs;
+      return;
+    }
     // never negative: a requestAnimationFrame timestamp can be older than a performance.now() taken by debugFrame()
     const dt = Math.min(Math.max((nowMs - this.last) / 1000, 0), 0.1);
     this.last = nowMs;

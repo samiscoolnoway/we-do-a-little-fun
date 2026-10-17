@@ -1,0 +1,901 @@
+/* Engineering & Computational Science Lab (AeroThermo Lab) inside the EUV simulator.
+   Every rule is scoped under .atl so nothing leaks into the machine or wafer views, and the lab's tokens are
+   mapped onto the simulator's palette and type: same dark surfaces, steel-blue primary actions, Barlow /
+   Barlow Semi Condensed / IBM Plex Mono. Amber marks heat; teal-blue marks flow. */
+.atl {
+  --bg: var(--bg-0);
+  --panel: var(--bg-1);
+  --panel-2: var(--bg-2);
+  --border: var(--line);
+  --text: var(--fg);
+  --muted: var(--fg-2);
+  --accent: var(--accent-2);
+  --accent-ink: #ffffff;
+  --heat: var(--c-resist);
+  --cool: var(--s1);
+  --ok: var(--c-etch);
+  --warn: #f2b84b;
+  --bad: var(--c-laser);
+  --field-bg: #131b29;
+  --body-fill: #262b33;
+  --body-edge: var(--c-resist);
+  --mesh-line: rgba(255, 255, 255, 0.28);
+  --arrow: rgba(255, 255, 255, 0.92);
+  --stream: rgba(255, 255, 255, 0.78);
+  --probe: #ff9f43;
+  --overlay-text: #ffffff;
+  --overlay-halo: rgba(0, 0, 0, 0.7);
+  --font: var(--font-ui);
+  --mono: var(--font-mono);
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 var(--font);
+}
+.atl * {
+  box-sizing: border-box;
+}
+.atl button, .atl input, .atl select {
+  font: inherit;
+  color: inherit;
+}
+.atl .unit {
+  color: var(--muted);
+  font-weight: 400;
+}
+.atl .num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.atl .atl-shell {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr) 380px;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: 'top top top' 'left center right';
+  height: 100%;
+}
+.atl .model-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.atl .model-tags span {
+  font-size: 11.5px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.atl .left, .atl .right {
+  background: var(--panel);
+  overflow-y: auto;
+  min-height: 0;
+}
+.atl .left {
+  grid-area: left;
+  border-right: 1px solid var(--border);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.atl .right {
+  grid-area: right;
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+.atl .center {
+  grid-area: center;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.atl .runbar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.atl .runbar-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.atl .runbar-row button {
+  flex: 1 1 auto;
+}
+.atl button {
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  border-radius: 6px;
+  padding: 7px 10px;
+  cursor: pointer;
+  font-weight: 500;
+}
+.atl button:hover:not(:disabled) {
+  border-color: var(--muted);
+}
+.atl button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.atl button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+  min-width: 96px;
+}
+.atl button.attention {
+  border-color: var(--warn);
+  box-shadow: 0 0 0 1px var(--warn) inset;
+}
+.atl button.quiet {
+  background: transparent;
+  flex: 0 0 auto;
+}
+.atl button:focus-visible, .atl select:focus-visible, .atl input:focus-visible, .atl summary:focus-visible {
+  outline: 2px solid var(--cool);
+  outline-offset: 1px;
+}
+.atl .status-chip {
+  margin-left: auto;
+  font-size: 12px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.atl .status-chip.s-converged, .atl .status-chip.s-finished {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+.atl .status-chip.s-levelled, .atl .status-chip.s-max-steps {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.atl .status-chip.s-failed {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+.atl .banner {
+  border-radius: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  font-size: 13px;
+}
+.atl .banner.small {
+  font-size: 12px;
+}
+.atl .banner.warn {
+  border-color: var(--warn);
+}
+.atl .banner.bad {
+  border-color: var(--bad);
+}
+.atl .banner.info {
+  border-color: var(--cool);
+}
+.atl .section {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+.atl .section summary {
+  cursor: pointer;
+  padding: 8px 10px;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+.atl .section-body {
+  padding: 2px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.atl .field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.atl .field label {
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.atl .field-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.atl .field-row input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+.atl .field input[type='number'], .atl .field select, .atl .field-select select {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 5px 7px;
+}
+.atl .field input[type='number'] {
+  width: 104px;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+.atl .field-row:not(:has(input[type='range'])) input[type='number'] {
+  width: 100%;
+}
+.atl .atl-hint {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.atl .toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+.atl .toggle input {
+  accent-color: var(--accent);
+}
+.atl .viewbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.atl .field-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.atl .flowview {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.atl .canvas-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 320px;
+  overflow: hidden;
+  touch-action: none;
+  cursor: crosshair;
+  background: var(--field-bg);
+}
+.atl .canvas-wrap .layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.atl .view-badges {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 6px;
+  pointer-events: none;
+}
+.atl .badge {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+}
+.atl .badge.subtle {
+  font-weight: 400;
+}
+.atl .view-buttons {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  display: flex;
+  gap: 4px;
+}
+.atl .view-buttons button {
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.25);
+  padding: 4px 9px;
+  font-size: 12.5px;
+}
+.atl .canvas-msg {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+.atl .atl-legend {
+  padding: 8px 16px 10px;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+}
+.atl .legend-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.atl .legend-bar {
+  height: 12px;
+  border-radius: 3px;
+}
+.atl .legend-ticks {
+  position: relative;
+  height: 16px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+.atl .legend-ticks span {
+  position: absolute;
+  transform: translateX(-50%);
+  top: 2px;
+  white-space: nowrap;
+}
+.atl .legend-minmax {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.atl .atl-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  flex: none;
+}
+.atl .atl-tabs button {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 10px 12px;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+.atl .atl-tabs button.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+.atl .tab-body {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.atl .panel-empty {
+  color: var(--muted);
+  padding: 12px 2px;
+}
+.atl .workbench {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.atl .progress {
+  position: relative;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--panel-2);
+}
+.atl .progress-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: color-mix(in srgb, var(--cool) 35%, transparent);
+}
+.atl .progress span {
+  position: relative;
+  font-size: 12px;
+  padding: 0 8px;
+  line-height: 22px;
+}
+.atl .stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.atl .stat {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: var(--panel-2);
+  min-width: 0;
+}
+.atl .stat-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.atl .stat-value {
+  font-family: var(--mono);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.atl .stat-value .unit {
+  font-family: var(--font);
+  font-size: 11.5px;
+}
+.atl .stat.ok .stat-value {
+  color: var(--ok);
+}
+.atl .stat.warn .stat-value {
+  color: var(--warn);
+}
+.atl .stat.bad .stat-value {
+  color: var(--bad);
+}
+.atl .plot {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  background: var(--panel-2);
+}
+.atl .plot figcaption {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.atl .plot svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.atl .plot .grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.atl .plot .tick {
+  fill: var(--muted);
+  font: 10px var(--mono);
+}
+.atl .plot .series {
+  fill: none;
+  stroke: var(--cool);
+  stroke-width: 1.6;
+}
+.atl .plot .series.heat {
+  stroke: var(--heat);
+}
+.atl .plot .target {
+  stroke: var(--warn);
+  stroke-dasharray: 4 3;
+}
+.atl .plot-note, .atl .plot-empty {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.atl .explain {
+  color: var(--muted);
+}
+.atl .small {
+  font-size: 12.5px;
+}
+.atl .probe-head {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.atl .probe table, .atl table.data {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.atl .probe th, .atl .probe td, .atl table.data th, .atl table.data td {
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.atl .probe th, .atl table.data th {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+@media (max-width: 1180px) {
+  .atl .atl-shell {
+    grid-template-columns: 300px minmax(0, 1fr);
+    grid-template-rows: auto minmax(480px, 1fr) auto;
+    grid-template-areas: 'top top' 'left center' 'right right';
+    height: auto;
+    min-height: 100%;
+  }
+  .atl .left {
+    max-height: calc(100dvh - 120px);
+    position: sticky;
+    top: 0;
+  }
+  .atl .right {
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+  .atl .center {
+    min-height: 70vh;
+  }
+}
+@media (max-width: 760px) {
+  .atl .atl-shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto;
+    grid-template-areas: 'top' 'center' 'left' 'right';
+  }
+  .atl .left {
+    position: static;
+    max-height: none;
+    border-right: none;
+    border-top: 1px solid var(--border);
+  }
+  .atl .center {
+    min-height: 0;
+  }
+  .atl .canvas-wrap {
+    height: 62vh;
+    flex: none;
+  }
+  .atl .model-tags span {
+    white-space: normal;
+  }
+  .atl .view-badges {
+    top: auto;
+    bottom: 48px;
+    right: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .atl .stats {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.atl .atl-key {
+  display: inline-block;
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  vertical-align: middle;
+  margin: 0 3px 0 6px;
+}
+.atl .atl-key.cool {
+  background: var(--cool);
+}
+.atl .atl-key.heat {
+  background: var(--heat);
+}
+.atl .plot .marker {
+  stroke: var(--muted);
+  stroke-dasharray: 2 3;
+}
+.atl .plot .axis-label {
+  fill: var(--muted);
+  font: 10.5px var(--font);
+}
+.atl .plot .series.atl-muted {
+  stroke: var(--muted);
+}
+.atl .atl-key.atl-muted {
+  background: var(--muted);
+}
+.atl .atl-key.dashed {
+  background: repeating-linear-gradient(to right, currentColor 0 4px, transparent 4px 7px);
+  color: var(--muted);
+}
+.atl .legend-item {
+  margin-right: 8px;
+  white-space: nowrap;
+}
+.atl table.data td.num {
+  font-family: var(--mono);
+}
+.atl .kv {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 10px;
+  font-size: 12.5px;
+}
+.atl .kv dt {
+  color: var(--muted);
+}
+.atl .kv dd {
+  margin: 0;
+  font-family: var(--mono);
+  text-align: right;
+}
+.atl .atl-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--panel-2);
+}
+.atl .atl-card h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+.atl .tag {
+  display: inline-block;
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  margin-right: 4px;
+}
+.atl .tag.ok {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+.atl .tag.warn {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+.atl .colmap {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.atl .colmap-y {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 10.5px;
+  color: var(--muted);
+  text-align: center;
+}
+.atl .colmap-canvas {
+  flex: 1;
+  min-width: 0;
+  height: 110px;
+  image-rendering: pixelated;
+  border-radius: 3px;
+}
+.atl .colmap-x {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+.atl .experiments, .atl .heating, .atl .thermal, .atl .learn {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.atl .scenario-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.atl .scenario {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.atl .scenario > div:first-child {
+  min-width: 0;
+  flex: 1 1 180px;
+}
+.atl .scenario-buttons {
+  display: flex;
+  gap: 4px;
+}
+.atl .experiment {
+  border-top: 1px solid var(--border);
+  padding: 6px 0;
+}
+.atl .experiment summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.atl .experiment p {
+  margin: 6px 0;
+  font-size: 13px;
+}
+.atl .table-scroll {
+  overflow-x: auto;
+  margin: 8px 0;
+  max-width: 100%;
+}
+.atl table.compare th, .atl table.compare td {
+  white-space: nowrap;
+}
+.atl button.tiny {
+  padding: 0 6px;
+}
+.atl .atl-card p {
+  margin: 6px 0;
+}
+.atl .segmented {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.atl .segmented button {
+  flex: 1;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+}
+.atl .segmented button.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.atl .topic summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.atl .topic p, .atl .activity p, .atl .activity li {
+  font-size: 13px;
+  line-height: 1.55;
+}
+.atl .learn-h {
+  margin: 8px 0 0;
+  font-size: 14px;
+}
+.atl .options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0 8px;
+}
+.atl .activity ol {
+  margin: 4px 0;
+  padding-left: 20px;
+}
+.atl .interpret {
+  border-left: 3px solid var(--cool);
+  padding: 6px 10px;
+  background: var(--panel-2);
+  border-radius: 0 6px 6px 0;
+  font-size: 13px;
+}
+.atl .small-seg {
+  margin-left: auto;
+}
+.atl .small-seg button {
+  padding: 3px 10px;
+  font-size: 12px;
+}
+.atl .atl-card ul {
+  margin: 6px 0;
+  padding-left: 18px;
+}
+.atl .atl-card li {
+  margin: 3px 0;
+}
+.atl .mobile-only {
+  display: none;
+}
+@media (max-width: 760px) {
+  .atl .mobile-only {
+    display: flex;
+  }
+  .atl .mobile-run {
+    width: 100%;
+    gap: 6px;
+    align-items: center;
+  }
+}
+
+/* ───── integration: header strip, typography shared with the simulator ───── */
+.atl .lab-intro {
+  grid-area: top;
+  display: flex;
+  align-items: center;
+  gap: 10px 16px;
+  flex-wrap: wrap;
+  padding: 8px var(--gutter-r) 8px var(--gutter-l);
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.atl .lab-title {
+  font: 600 13px/1.2 var(--font-cond);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.atl .lab-title span {
+  display: block;
+  font: 400 12px/1.3 var(--font-ui);
+  letter-spacing: 0.01em;
+  text-transform: none;
+  color: var(--muted);
+}
+.atl .lab-intro .model-tags {
+  margin-left: auto;
+}
+.atl button,
+.atl .atl-tabs button,
+.atl .segmented button {
+  font: 500 13px/1.1 var(--font-cond);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.atl .section summary,
+.atl .stat-label,
+.atl .plot figcaption,
+.atl .atl-card h3,
+.atl .legend-title {
+  font-family: var(--font-cond);
+  letter-spacing: 0.06em;
+}
+.atl .section summary,
+.atl .atl-card h3 {
+  text-transform: uppercase;
+}
+.atl .about {
+  max-width: 1100px;
+}
+.atl .about p,
+.atl .about li {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text);
+}
+.atl .about-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+  margin: 8px 0;
+}
+.atl .about-grid > div {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: var(--panel);
+}
+.atl .about-grid h4 {
+  margin: 0 0 4px;
+  font: 600 12px/1.2 var(--font-cond);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.atl .about-grid p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.atl .tiny-link {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11.5px;
+  color: var(--accent);
+  background: transparent;
+}
+.atl .about ol {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+.atl .about li {
+  margin: 4px 0;
+}
+.atl .atl-tabs button {
+  padding: 10px 9px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}

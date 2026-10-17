@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { LabApp } from './lab/ui/LabApp';
+import { nav, useSection } from './nav';
 import { sim, useSim } from './store/sim';
 import { Announcer, Fallback, Hint, StageCard, TopBar, ViewportFoot } from './ui/Chrome';
 import { ExteriorCard, InspectCard, IsoVeil } from './ui/Explore';
@@ -11,6 +13,8 @@ function useShortcuts() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // the machine shortcuts do not apply inside the Engineering Lab
+      if (nav.lab) return;
       const el = document.activeElement as HTMLElement | null;
       const tag = el?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return;
@@ -73,11 +77,14 @@ export function App() {
   const closed = useSim((s) => s.casing === 'closed');
   const chip = useSim((s) => !!s.chip);
   const [tall, setTall] = useState(false);
+  const section = useSection();
+  const lab = section === 'lab';
   useShortcuts();
   return (
-    <div className="app">
+    <div className="app" data-section={section}>
       <TopBar />
-      <div className="main">
+      {/* the 3-D sections stay mounted (scene, camera and timeline are kept) but hidden while the lab is open */}
+      <div className="main" hidden={lab}>
         <div className={`viewport${inspecting || chip ? ' is-inspecting' : ''}${chip ? ' is-chip' : ''}`} data-testid="viewport" data-casing={closed ? 'closed' : 'open'}>
           <SimCanvas />
           <IsoVeil />
@@ -88,7 +95,10 @@ export function App() {
         </div>
         <Panel tall={tall} onTall={setTall} />
       </div>
-      <Dock />
+      <div className="dock-slot" hidden={lab}>
+        <Dock />
+      </div>
+      {lab && <LabApp />}
       <Announcer />
     </div>
   );
