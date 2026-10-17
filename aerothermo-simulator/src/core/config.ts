@@ -42,8 +42,20 @@ export interface NumericsConfig {
   mode: 'steady' | 'transient';
   /** steady mode: steps run at first order before switching to the selected order (robust impulsive start) */
   startupSteps: number;
+  /**
+   * steady mode, supersonic freestream: 'implicit' = LU-SGS with a large CFL number (fast); 'explicit' = SSP-RK2
+   * with local time steps. Subsonic steady runs and all time-accurate runs always use the explicit scheme.
+   */
+  scheme: 'implicit' | 'explicit';
+  /** CFL number of the implicit scheme (ramped up from 1 by 10 % per step) */
+  cflImplicit: number;
   /** steady mode: stop when the residual has dropped by this many orders of magnitude */
   residualDrop: number;
+  /**
+   * steady mode: which residual decides convergence. 'domain' = all cells. 'windward' = the cells upstream of the
+   * body centre only; allowed for supersonic freestreams only, where the wake cannot influence the windward flow.
+   */
+  convergeOn: 'domain' | 'windward';
   /** maximum number of steps in either mode */
   maxSteps: number;
   /** transient mode: physical time to simulate, s */
@@ -83,7 +95,7 @@ export interface SimConfig {
 export const DEFAULT_CONFIG: SimConfig = {
   flow: { mach: 3, Tinf: 220, pinf: 2500, angle: 0 },
   body: { kind: 'cylinder', radius: 0.5, aspect: 0.6 },
-  numerics: { mesh: 'coarse', cfl: 0.8, order: 2, limiter: 'vanalbada', mode: 'steady', startupSteps: 300, residualDrop: 5, maxSteps: 8000, endTime: 0.02 },
+  numerics: { mesh: 'coarse', cfl: 0.8, order: 2, limiter: 'vanalbada', mode: 'steady', startupSteps: 100, scheme: 'implicit', cflImplicit: 8, residualDrop: 5, convergeOn: 'windward', maxSteps: 8000, endTime: 0.02 },
   thermal: { rho: 280, cp: 1200, k: 0.4, thickness: 0.03, T0: 300, emissivity: 0.85, rear: 'adiabatic', Trear: 300, duration: 60, nodes: 61 },
 };
 
@@ -121,6 +133,20 @@ export function configWarnings(c: SimConfig): string[] {
   return w;
 }
 
+/**
+ * The time integrator actually used. Implicit LU-SGS only for supersonic steady runs: its sweeps run in cell-index
+ * order and do not preserve the up–down symmetry exactly, which in subsonic flow lets the inviscid wake start to
+ * shed and the residual never settles. In supersonic flow the wake cannot influence the windward flow.
+ */
+export function effectiveScheme(c: SimConfig): 'implicit' | 'explicit' {
+  return c.numerics.mode === 'steady' && c.numerics.scheme === 'implicit' && c.flow.mach > 1 ? 'implicit' : 'explicit';
+}
+
+/** the convergence criterion actually used: the windward residual is only meaningful for supersonic flow */
+export function effectiveCriterion(c: SimConfig): 'domain' | 'windward' {
+  return c.numerics.convergeOn === 'windward' && c.flow.mach > 1 ? 'windward' : 'domain';
+}
+
 export function buildMesh(c: SimConfig): Mesh {
   const p = MESH_PRESETS[c.numerics.mesh];
   // first-cell size scaled with the mesh so the stretching stays similar on every preset
@@ -150,5 +176,10 @@ export function buildSolver(c: SimConfig, mesh = buildMesh(c)): EulerSolver {
   const s = new EulerSolver(mesh, solverOptions(c, steadyStartup ? 1 : c.numerics.order));
   const fs = freestreamOf(c);
   s.init(() => ({ rho: fs.rho, u: fs.u, v: fs.v, p: fs.p }));
+  // windward region: cells upstream of the body centre, measured along the freestream direction
+  const a = (c.flow.angle * Math.PI) / 180;
+  const mask = new Uint8Array(mesh.ni * mesh.nj);
+  for (let k = 0; k < mask.length; k++) mask[k] = mesh.xc[k] * Math.cos(a) + mesh.yc[k] * Math.sin(a) < 0 ? 1 : 0;
+  s.residualMask = mask;
   return s;
 }

@@ -62,6 +62,17 @@ describe('supersonic cylinder, M = 3', () => {
     expect(st.mach).toBeLessThan(0.1);
   });
 
+  // Measured: windward 0.96 % (stagnation-point cells), inside the captured shock up to −4.2 %, worst cell in the
+  // wake −12 %, area mean 0.36 % (0.26 % on the medium mesh).
+  it('total enthalpy is conserved on the windward side (< 1.2 % outside the captured shock); the wake error is reported', () => {
+    const h = sim.diagnostics().enthalpyError;
+    expect(Math.abs(h.front)).toBeLessThan(0.012);
+    expect(Math.abs(h.shock)).toBeGreaterThan(Math.abs(h.front));
+    expect(h.mean).toBeLessThan(0.006);
+    // the worst cell lies downstream, in the wake (x > 0), where the inviscid model is least trustworthy
+    expect(h.maxX).toBeGreaterThan(0);
+  });
+
   it('bow-shock standoff is within 15 % of the Billig correlation', () => {
     const d = standoff(sim);
     expect(Math.abs(d / billigStandoffCylinder(3) - 1)).toBeLessThan(0.15);
@@ -76,12 +87,14 @@ describe('supersonic cylinder, M = 3', () => {
     expect(Math.abs(c.mach - 3)).toBeLessThan(1e-6);
   });
 
-  it('symmetric flow at zero incidence gives a symmetric solution', () => {
+  // Symmetry at zero incidence. The explicit scheme treats both halves identically (measured asymmetry ≈ 2e-7 p∞);
+  // the implicit LU-SGS sweeps run in cell order, so the converged solution carries an asymmetry at the level of
+  // the convergence tolerance (measured 3.1e-4 p∞ = 2.6e-5 of the stagnation pressure).
+  it('symmetric flow at zero incidence gives a symmetric solution (to convergence level)', () => {
     const m = sim.mesh;
-    const fs = freestreamOf(sim.config);
     let worst = 0;
-    for (let j = 0; j < m.nj; j++) for (let i = 1; i < m.ni / 2; i++) worst = Math.max(worst, Math.abs(sim.solver.cell(i, j).p - sim.solver.cell(m.ni - i, j).p) / fs.p);
-    expect(worst).toBeLessThan(1e-4);
+    for (let j = 0; j < m.nj; j++) for (let i = 1; i < m.ni / 2; i++) worst = Math.max(worst, Math.abs(sim.solver.cell(i, j).p - sim.solver.cell(m.ni - i, j).p));
+    expect(worst / sim.solver.cell(0, 0).p).toBeLessThan(1e-4);
   });
 
   it('surface pressure falls monotonically from the stagnation point to the shoulder', () => {
@@ -128,6 +141,37 @@ describe('supersonic cylinder, M = 3', () => {
     }
     expect(minR).toBeGreaterThan(R);
     expect(maxX).toBeGreaterThan(R); // it gets past the body
+  });
+});
+
+describe('implicit and explicit solvers reach the same discrete steady state (M = 3)', () => {
+  // The two time integrators differ only in how they march; the converged solution of the same spatial
+  // discretisation must agree. Measured: stagnation pressure identical to 4 digits, standoff within 0.1 %.
+  it('stagnation pressure and standoff agree; the implicit run takes far fewer steps', () => {
+    const imp = run(() => {});
+    const exp = run((c) => {
+      c.numerics.scheme = 'explicit';
+    });
+    expect(imp.scheme).toBe('implicit');
+    expect(exp.scheme).toBe('explicit');
+    expect(imp.diagnostics().status).toBe('converged');
+    expect(exp.diagnostics().status).toBe('converged');
+    const pi = imp.solver.cell(0, 0).p;
+    const pe = exp.solver.cell(0, 0).p;
+    expect(Math.abs(pi / pe - 1)).toBeLessThan(1e-3);
+    expect(Math.abs(standoff(imp) / standoff(exp) - 1)).toBeLessThan(5e-3);
+    expect(imp.solver.steps).toBeLessThan(0.6 * exp.solver.steps);
+    // explicit: exact mirror symmetry up to round-off
+    const m = exp.mesh;
+    let worst = 0;
+    for (let j = 0; j < m.nj; j++) for (let i = 1; i < m.ni / 2; i++) worst = Math.max(worst, Math.abs(exp.solver.cell(i, j).p - exp.solver.cell(m.ni - i, j).p));
+    expect(worst / freestreamOf(exp.config).p).toBeLessThan(1e-5);
+  });
+
+  it('subsonic steady runs always use the explicit scheme', () => {
+    const c = cloneConfig(DEFAULT_CONFIG);
+    c.flow.mach = 0.6;
+    expect(new Simulation(c).scheme).toBe('explicit');
   });
 });
 
@@ -208,5 +252,42 @@ describe('probe and point location', () => {
       const h = loc.locate(px, py)!;
       expect(interpolate(m, lin, h)).toBeCloseTo(2 * px - 3 * py + 1, 4);
     }
+  });
+});
+
+describe('time-accurate mode and failure handling at the simulation level', () => {
+  it('transient mode marches one global Δt and stops exactly at the requested time', () => {
+    const c = cloneConfig(DEFAULT_CONFIG);
+    c.numerics.mode = 'transient';
+    c.numerics.endTime = 2e-4;
+    const sim = new Simulation(c);
+    expect(sim.scheme).toBe('explicit');
+    while (!sim.done) sim.advance(500);
+    const d = sim.diagnostics();
+    expect(d.status).toBe('finished');
+    expect(d.time).toBeCloseTo(2e-4, 15);
+    // the bow shock has not yet formed far upstream: the freestream 3 radii ahead is untouched at this early time
+    const loc = buildLocator(sim.mesh);
+    const h = loc.locate(-3 * c.body.radius, 0)!;
+    expect(Math.abs(sim.solver.cell(h.i, h.j).p / freestreamOf(c).p - 1)).toBeLessThan(1e-9);
+  });
+
+  it('an unstable CFL number is caught: status failed, location reported, last valid state kept, no further steps', () => {
+    const c = cloneConfig(DEFAULT_CONFIG);
+    c.numerics.scheme = 'explicit';
+    c.numerics.cfl = 1.5;
+    c.flow.mach = 6;
+    const sim = new Simulation(c);
+    while (!sim.done) sim.advance(500);
+    const d = sim.diagnostics();
+    expect(d.status).toBe('failed');
+    expect(d.failure).not.toBeNull();
+    expect(d.failure!.reason).toMatch(/non-positive|non-finite/);
+    const f = computeFields(sim);
+    for (let k = 0; k < f.p.length; k++) {
+      expect(f.p[k]).toBeGreaterThan(0);
+      expect(f.rho[k]).toBeGreaterThan(0);
+    }
+    expect(sim.advance(10)).toBe(0);
   });
 });

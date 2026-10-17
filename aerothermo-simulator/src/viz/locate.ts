@@ -1,5 +1,8 @@
 import type { Mesh } from '../core/mesh';
 
+/** the parts of a mesh that point location and interpolation need (also available on the UI thread) */
+export type GridLike = Pick<Mesh, 'ni' | 'nj' | 'x' | 'y' | 'area' | 'periodicI'>;
+
 /**
  * Point location on the structured mesh: which cell contains (x, y), and where inside it. Used by the probe
  * (which reports the containing cell's own computed values) and by streamline integration (which interpolates
@@ -23,7 +26,7 @@ export interface Locator {
 
 const cross = (ax: number, ay: number, bx: number, by: number) => ax * by - ay * bx;
 
-export function buildLocator(m: Mesh): Locator {
+export function buildLocator(m: GridLike): Locator {
   const { ni, nj, x, y } = m;
   const N = (i: number, j: number) => j * (ni + 1) + i;
   let x0 = Infinity,
@@ -130,7 +133,7 @@ export function buildLocator(m: Mesh): Locator {
  * periodic O-grid node i = ni is node i = 0. Used for smooth display and interpolation only; the probe and all
  * diagnostics use cell values.
  */
-export function nodeAverage(m: Mesh, f: ArrayLike<number>): Float32Array {
+export function nodeAverage(m: GridLike, f: ArrayLike<number>): Float32Array {
   const { ni, nj } = m;
   const out = new Float32Array((ni + 1) * (nj + 1));
   for (let j = 0; j <= nj; j++)
@@ -154,7 +157,7 @@ export function nodeAverage(m: Mesh, f: ArrayLike<number>): Float32Array {
 }
 
 /** bilinear interpolation of node values inside a located cell */
-export function interpolate(m: Mesh, nodes: ArrayLike<number>, h: Hit): number {
+export function interpolate(m: GridLike, nodes: ArrayLike<number>, h: Hit): number {
   const W = m.ni + 1;
   const a = h.j * W + h.i;
   const s = h.xi;
@@ -168,7 +171,7 @@ export function interpolate(m: Mesh, nodes: ArrayLike<number>, h: Hit): number {
  * a stagnation region (|V| < 0.2 % of `vref`), or reaches `maxPoints`.
  */
 export function traceStreamline(
-  m: Mesh,
+  m: GridLike,
   loc: Locator,
   nu: ArrayLike<number>,
   nv: ArrayLike<number>,
@@ -203,4 +206,13 @@ export function traceStreamline(
     pts.push(px, py);
   }
   return new Float32Array(pts);
+}
+
+/** even-odd point-in-polygon test (used to tell "inside the body" from "outside the domain") */
+export function pointInPolygon(px: number, py: number, xs: ArrayLike<number>, ys: ArrayLike<number>): boolean {
+  let inside = false;
+  for (let i = 0, j = xs.length - 1; i < xs.length; j = i++) {
+    if (ys[i] > py !== ys[j] > py && px < ((xs[j] - xs[i]) * (py - ys[i])) / (ys[j] - ys[i]) + xs[i]) inside = !inside;
+  }
+  return inside;
 }

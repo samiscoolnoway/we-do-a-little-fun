@@ -18,7 +18,9 @@ import type { Mesh } from './mesh';
  *    with a slope limiter (minmod or van Albada) in each mesh direction, which keeps shocks free of oscillations.
  *    If a reconstructed face state would have ρ ≤ 0 or p ≤ 0, that face falls back to first order; such faces
  *    are counted and reported.
- *  - Time integration: two-stage strong-stability-preserving Runge–Kutta (SSP-RK2, Heun).
+ *  - Time integration: two-stage strong-stability-preserving Runge–Kutta (SSP-RK2, Heun), or, for steady states
+ *    only, an implicit LU-SGS step (lower–upper symmetric Gauss–Seidel, Yoon & Jameson 1988) that allows CFL
+ *    numbers far above 1.
  *  - Time step: CFL condition per cell, Δt = CFL · A / (½ Σ_faces (|uₙ| + a) ℓ), the global minimum in
  *    time-accurate mode, or each cell's own value in local-time-stepping (steady-state only) mode.
  *  - Boundary conditions through two layers of ghost cells: slip wall (reflected normal velocity), characteristic
@@ -58,6 +60,8 @@ export interface StepResult {
   dt: number;
   /** RMS over cells of ∂ρ/∂t at the start of the step, kg/(m³·s) */
   residual: number;
+  /** the same RMS over the cells selected by `residualMask` (NaN without a mask) */
+  residualMasked: number;
 }
 
 const NV = 4;
@@ -81,16 +85,25 @@ export class EulerSolver {
   private pr: Float64Array;
   private res: Float64Array[];
   private dtCell: Float64Array;
+  private dU: Float64Array[];
+  private diag: Float64Array;
+  private fa = new Float64Array(NV);
+  private fb = new Float64Array(NV);
+  private acc = new Float64Array(NV);
   private f = new Float64Array(NV);
   time = 0;
   steps = 0;
   lastDt = 0;
   /** faces that fell back to first order during the last step */
   fallbacks = 0;
+  /** implicit mode: cells whose update was scaled down by the update limiter in the last step */
+  limitedCells = 0;
   /** residual history (one value per step) */
   readonly residuals: number[] = [];
   firstResidual = 0;
   failure: Failure | null = null;
+  /** optional cell mask (1 = included) for a second residual over a sub-region */
+  residualMask: Uint8Array | null = null;
 
   constructor(mesh: Mesh, opts: SolverOptions) {
     if (mesh.ni < 2 || mesh.nj < 2) throw new Error('the solver needs at least 2 cells in each direction');
@@ -112,6 +125,8 @@ export class EulerSolver {
     this.vv = new Float64Array(n);
     this.pr = new Float64Array(n);
     this.dtCell = new Float64Array(mesh.ni * mesh.nj);
+    this.dU = Array.from({ length: NV }, () => new Float64Array(mesh.ni * mesh.nj));
+    this.diag = new Float64Array(mesh.ni * mesh.nj);
   }
 
   /** switch reconstruction order (e.g. after a first-order start-up phase) */
@@ -458,7 +473,7 @@ export class EulerSolver {
    * appears; `failure` then says where. `maxDt` caps the global time step (used to land exactly on an output time).
    */
   step(maxDt = Infinity): StepResult {
-    if (this.failure) return { ok: false, dt: 0, residual: NaN };
+    if (this.failure) return { ok: false, dt: 0, residual: NaN, residualMasked: NaN };
     const { ni, nj, area } = this.mesh;
     const local = this.opts.timeMode === 'local';
     this.copyState(this.U, this.Ubackup);
@@ -473,11 +488,19 @@ export class EulerSolver {
     this.computeResidual();
     // residual measure: RMS of ∂ρ/∂t
     let s2 = 0;
+    let m2 = 0;
+    let nm = 0;
+    const mask = this.residualMask;
     for (let c = 0; c < ni * nj; c++) {
       const d = this.res[0][c] / area[c];
       s2 += d * d;
+      if (mask && mask[c]) {
+        m2 += d * d;
+        nm++;
+      }
     }
     const residual = Math.sqrt(s2 / (ni * nj));
+    const residualMasked = nm ? Math.sqrt(m2 / nm) : NaN;
     // stage 1: U1 = Un + Δt R(Un)
     this.copyState(this.U, this.U0);
     for (let j = 0; j < nj; j++)
@@ -504,7 +527,208 @@ export class EulerSolver {
     this.lastDt = dt;
     if (this.steps === 1 || this.firstResidual === 0) this.firstResidual = residual;
     this.residuals.push(residual);
-    return { ok: true, dt, residual };
+    return { ok: true, dt, residual, residualMasked };
+  }
+
+  // ───────── implicit LU-SGS (steady state only) ─────────
+  /** physical flux F(U)·n for a conservative state, n scaled by the face length, into `out` */
+  private fluxN(r: number, ru: number, rv: number, E: number, nx: number, ny: number, out: Float64Array) {
+    const u = ru / r;
+    const v = rv / r;
+    const p = (this.gamma - 1) * (E - 0.5 * (ru * u + rv * v));
+    const un = u * nx + v * ny;
+    out[0] = r * un;
+    out[1] = ru * un + p * nx;
+    out[2] = rv * un + p * ny;
+    out[3] = (E + p) * un;
+  }
+
+  /**
+   * Neighbour tables for the implicit operator, built once: for each cell four slots (left, right, bottom, top)
+   * holding the neighbour cell (−1 at a wall or far-field boundary, whose ghost states are lagged, i.e. treated
+   * explicitly) and the outward face vector scaled by the face length.
+   */
+  private nbIdx: Int32Array | null = null;
+  private nbNx: Float64Array | null = null;
+  private nbNy: Float64Array | null = null;
+  private nbLen: Float64Array | null = null;
+  private nbLam: Float64Array | null = null;
+  private padIdx: Int32Array | null = null;
+
+  private buildNeighbours() {
+    const { ni, nj, inx, iny, jnx, jny, ilen, jlen, periodicI } = this.mesh;
+    const n = ni * nj;
+    const idx = new Int32Array(4 * n).fill(-1);
+    const nx = new Float64Array(4 * n);
+    const ny = new Float64Array(4 * n);
+    const len = new Float64Array(4 * n);
+    const pad = new Int32Array(n);
+    for (let j = 0; j < nj; j++)
+      for (let i = 0; i < ni; i++) {
+        const c = j * ni + i;
+        pad[c] = this.P(i, j);
+        const fl = j * (ni + 1) + i;
+        const fr = fl + 1;
+        const fb = c;
+        const ft = c + ni;
+        const k = 4 * c;
+        if (i > 0) idx[k] = c - 1;
+        else if (periodicI) idx[k] = j * ni + ni - 1;
+        if (i < ni - 1) idx[k + 1] = c + 1;
+        else if (periodicI) idx[k + 1] = j * ni;
+        if (j > 0) idx[k + 2] = c - ni;
+        if (j < nj - 1) idx[k + 3] = c + ni;
+        nx[k] = -inx[fl];
+        ny[k] = -iny[fl];
+        len[k] = ilen[fl];
+        nx[k + 1] = inx[fr];
+        ny[k + 1] = iny[fr];
+        len[k + 1] = ilen[fr];
+        nx[k + 2] = -jnx[fb];
+        ny[k + 2] = -jny[fb];
+        len[k + 2] = jlen[fb];
+        nx[k + 3] = jnx[ft];
+        ny[k + 3] = jny[ft];
+        len[k + 3] = jlen[ft];
+      }
+    this.nbIdx = idx;
+    this.nbNx = nx;
+    this.nbNy = ny;
+    this.nbLen = len;
+    this.nbLam = new Float64Array(4 * n);
+    this.padIdx = pad;
+  }
+
+  /**
+   * One implicit LU-SGS step towards the steady state: (A/Δt − ∂R/∂U) ΔU = R(U), with the first-order Rusanov
+   * Jacobian on the left (matrix-free) and the full (first- or second-order) residual on the right. Δt is each
+   * cell's local time step for the given CFL number. Returns ok = false and restores the state if the update
+   * produces a non-physical state.
+   */
+  stepImplicit(cfl: number): StepResult {
+    if (this.failure) return { ok: false, dt: 0, residual: NaN, residualMasked: NaN };
+    if (!this.nbIdx) this.buildNeighbours();
+    const { ni, nj, area } = this.mesh;
+    const n = ni * nj;
+    const g = this.gamma;
+    this.copyState(this.U, this.Ubackup);
+    this.fallbacks = 0;
+    if (!this.toPrimitive(this.U, 0)) return this.abort();
+    this.fillGhosts();
+    this.computeResidual();
+    let s2 = 0;
+    let m2 = 0;
+    let nm = 0;
+    const mask = this.residualMask;
+    for (let c = 0; c < n; c++) {
+      const d = this.res[0][c] / area[c];
+      s2 += d * d;
+      if (mask && mask[c]) {
+        m2 += d * d;
+        nm++;
+      }
+    }
+    const residual = Math.sqrt(s2 / n);
+    const residualMasked = nm ? Math.sqrt(m2 / nm) : NaN;
+    const idx = this.nbIdx!;
+    const fnx = this.nbNx!;
+    const fny = this.nbNy!;
+    const flen = this.nbLen!;
+    const lamS = this.nbLam!;
+    const pad = this.padIdx!;
+    const { rho, vu, vv, pr } = this;
+    // spectral radius (|uₙ| + a)·ℓ on every face slot (larger of the two sides) and the diagonal
+    // A/Δt + ½ Σ λ over all four faces, with Δt = CFL·A / (½ Σ λ_own)
+    let dtMin = Infinity;
+    for (let c = 0; c < n; c++) {
+      const pc = pad[c];
+      const ac = Math.sqrt((g * pr[pc]) / rho[pc]);
+      let own = 0;
+      let sum = 0;
+      for (let k = 4 * c; k < 4 * c + 4; k++) {
+        const len = flen[k];
+        const ex = fnx[k] / len;
+        const ey = fny[k] / len;
+        const lc = (Math.abs(vu[pc] * ex + vv[pc] * ey) + ac) * len;
+        own += lc;
+        const d = idx[k];
+        let l = lc;
+        if (d >= 0) {
+          const pd = pad[d];
+          const ld = (Math.abs(vu[pd] * ex + vv[pd] * ey) + Math.sqrt((g * pr[pd]) / rho[pd])) * len;
+          if (ld > l) l = ld;
+        }
+        lamS[k] = l;
+        sum += l;
+      }
+      const dt = (cfl * area[c]) / (0.5 * own);
+      if (dt < dtMin) dtMin = dt;
+      this.diag[c] = area[c] / dt + 0.5 * sum;
+    }
+    const dU = this.dU;
+    const U = this.U;
+    const fa = this.fa;
+    const fb = this.fb;
+    // ½ (ΔF_d·n − λ ΔU_d) for neighbour slot k with neighbour d, accumulated into acc
+    const acc = this.acc;
+    const offdiag = (k: number, d: number) => {
+      const pd = pad[d];
+      const r = U[0][pd];
+      const ru = U[1][pd];
+      const rv = U[2][pd];
+      const E = U[3][pd];
+      this.fluxN(r + dU[0][d], ru + dU[1][d], rv + dU[2][d], E + dU[3][d], fnx[k], fny[k], fa);
+      this.fluxN(r, ru, rv, E, fnx[k], fny[k], fb);
+      const l = lamS[k];
+      for (let v = 0; v < NV; v++) acc[v] += 0.5 * (fa[v] - fb[v] - l * dU[v][d]);
+    };
+    // forward sweep over lower neighbours (smaller cell index), then backward sweep over upper neighbours
+    for (let c = 0; c < n; c++) {
+      acc.fill(0);
+      for (let k = 4 * c; k < 4 * c + 4; k++) {
+        const d = idx[k];
+        if (d >= 0 && d < c) offdiag(k, d);
+      }
+      for (let v = 0; v < NV; v++) dU[v][c] = (this.res[v][c] - acc[v]) / this.diag[c];
+    }
+    for (let c = n - 1; c >= 0; c--) {
+      acc.fill(0);
+      for (let k = 4 * c; k < 4 * c + 4; k++) {
+        const d = idx[k];
+        if (d > c) offdiag(k, d);
+      }
+      for (let v = 0; v < NV; v++) dU[v][c] -= acc[v] / this.diag[c];
+    }
+    // Update limiter: a cell whose density or pressure would change by more than 30 % in one implicit step gets
+    // a proportionally smaller step. This only shapes the path to the steady state (ΔU → 0 there), never the
+    // converged solution; the number of limited cells is reported.
+    const maxRel = 0.3;
+    this.limitedCells = 0;
+    for (let j = 0; j < nj; j++)
+      for (let i = 0; i < ni; i++) {
+        const c = j * ni + i;
+        const p = this.P(i, j);
+        const r0 = U[0][p];
+        const p0 = this.pr[p];
+        let alpha = 1;
+        for (let it = 0; it < 6; it++) {
+          const r1 = r0 + alpha * dU[0][c];
+          const ru = U[1][p] + alpha * dU[1][c];
+          const rv = U[2][p] + alpha * dU[2][c];
+          const E = U[3][p] + alpha * dU[3][c];
+          const p1 = (g - 1) * (E - (0.5 * (ru * ru + rv * rv)) / r1);
+          if (r1 > (1 - maxRel) * r0 && r1 < (1 + maxRel) * r0 && p1 > (1 - maxRel) * p0 && p1 < (1 + maxRel) * p0) break;
+          alpha *= 0.5;
+        }
+        if (alpha < 1) this.limitedCells++;
+        for (let v = 0; v < NV; v++) U[v][p] += alpha * dU[v][c];
+      }
+    if (!this.toPrimitive(this.U, 1)) return this.abort();
+    this.steps++;
+    this.lastDt = dtMin;
+    if (this.steps === 1 || this.firstResidual === 0) this.firstResidual = residual;
+    this.residuals.push(residual);
+    return { ok: true, dt: dtMin, residual, residualMasked };
   }
 
   /** one time-accurate step that does not go past time t */
@@ -515,7 +739,7 @@ export class EulerSolver {
   private abort(): StepResult {
     this.copyState(this.Ubackup, this.U);
     this.toPrimitiveUnchecked();
-    return { ok: false, dt: 0, residual: NaN };
+    return { ok: false, dt: 0, residual: NaN, residualMasked: NaN };
   }
 
   /** refresh primitives from the (restored) state without validity checks */

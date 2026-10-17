@@ -1,4 +1,4 @@
-import { type SimConfig, buildMesh, buildSolver, cloneConfig, configWarnings, freestreamOf } from './config';
+import { type SimConfig, buildMesh, buildSolver, cloneConfig, configWarnings, effectiveCriterion, effectiveScheme, freestreamOf } from './config';
 import type { EulerSolver, Failure } from './euler';
 import { CV } from './gas';
 import type { Mesh } from './mesh';
@@ -29,15 +29,26 @@ export interface Diagnostics {
   endTime: number;
   /** last global Δt (transient) or smallest local Δt (steady), s */
   dt: number;
+  /** CFL number used in the last step (the implicit scheme ramps it up) */
   cfl: number;
+  scheme: 'implicit' | 'explicit';
+  /** implicit scheme: cells whose update was scaled down by the update limiter in the last step */
+  limitedCells: number;
   /** order used in the last step (steady mode starts at first order) */
   order: 1 | 2;
   startupSteps: number;
   residual: number;
   /** reference residual: largest of the first 5 steps */
   residualRef: number;
-  /** orders of magnitude the residual has dropped below the reference */
+  /** residual over the windward region (cells upstream of the body centre) and its reference */
+  residualWindward: number;
+  residualWindwardRef: number;
+  /** orders of magnitude the residual used for convergence has dropped below its reference */
   drop: number;
+  dropDomain: number;
+  dropWindward: number;
+  /** residual that decides convergence (steady mode) */
+  criterion: 'domain' | 'windward';
   targetDrop: number;
   /** faces that fell back to first-order reconstruction in the last step */
   fallbacks: number;
@@ -49,6 +60,14 @@ export interface Diagnostics {
   /** net mass flow out through the far-field boundary relative to the freestream mass flow through the body height
    *  (approximate: evaluated from the outermost cell states); → 0 for a steady solution */
   massImbalance: number;
+  /**
+   * Total-enthalpy error h + V²/2 relative to the freestream value. In steady, adiabatic, inviscid flow total
+   * enthalpy is the same everywhere, so any deviation is numerical error (or an unconverged transient).
+   * `front` = cells upstream of the body's centre (x < 0, where the heating is evaluated), excluding the cells
+   * inside the captured shock; `shock` = the largest error inside the captured shock, whose 2–3 cells hold
+   * intermediate, non-physical states of the smeared discontinuity; `max` = whole domain.
+   */
+  enthalpyError: { front: number; shock: number; max: number; maxX: number; maxY: number; mean: number };
   warnings: string[];
 }
 
@@ -58,8 +77,13 @@ export class Simulation {
   readonly solver: EulerSolver;
   status: RunStatus = 'ready';
   residualRef = 0;
-  /** full residual history (RMS ∂ρ/∂t, kg/(m³·s)) */
+  windRef = 0;
+  /** full residual history (RMS ∂ρ/∂t, kg/(m³·s)), whole domain and windward region */
   readonly history: number[] = [];
+  readonly windHistory: number[] = [];
+  readonly criterion: 'domain' | 'windward';
+  readonly scheme: 'implicit' | 'explicit';
+  cflNow = 0;
   msPerStep = 0;
   private mass0: number;
 
@@ -67,6 +91,9 @@ export class Simulation {
     this.config = cloneConfig(config);
     this.mesh = buildMesh(this.config);
     this.solver = buildSolver(this.config, this.mesh);
+    this.criterion = effectiveCriterion(this.config);
+    this.scheme = effectiveScheme(this.config);
+    this.cflNow = this.scheme === 'implicit' ? 1 : this.config.numerics.cfl;
     this.mass0 = this.solver.totals().mass;
   }
 
@@ -74,11 +101,15 @@ export class Simulation {
     return this.status !== 'ready' && this.status !== 'running';
   }
 
-  /** orders of magnitude the residual has fallen below the reference */
+  /** orders of magnitude the convergence residual has fallen below its reference */
   drop(): number {
-    const r = this.history[this.history.length - 1];
-    if (!(this.residualRef > 0) || !(r > 0)) return 0;
-    return Math.log10(this.residualRef / r);
+    return this.criterion === 'windward' ? this.dropOf(this.windHistory, this.windRef) : this.dropOf(this.history, this.residualRef);
+  }
+
+  private dropOf(h: number[], ref: number): number {
+    const r = h[h.length - 1];
+    if (!(ref > 0) || !(r > 0)) return 0;
+    return Math.log10(ref / r);
   }
 
   /**
@@ -100,14 +131,23 @@ export class Simulation {
     let k = 0;
     while (k < maxSteps) {
       if (n.mode === 'steady' && s.steps === n.startupSteps && s.opts.order !== n.order) s.setOrder(n.order);
-      const r = n.mode === 'transient' ? s.stepTo(n.endTime) : s.step();
+      let r;
+      if (n.mode === 'transient') r = s.stepTo(n.endTime);
+      else if (this.scheme === 'implicit') {
+        this.cflNow = Math.min(n.cflImplicit, Math.pow(1.1, s.steps));
+        r = s.stepImplicit(this.cflNow);
+      } else r = s.step();
       k++;
       if (!r.ok) {
         this.status = 'failed';
         break;
       }
       this.history.push(r.residual);
-      if (s.steps <= 5) this.residualRef = Math.max(this.residualRef, r.residual);
+      this.windHistory.push(r.residualMasked);
+      if (s.steps <= 5) {
+        this.residualRef = Math.max(this.residualRef, r.residual);
+        this.windRef = Math.max(this.windRef, r.residualMasked);
+      }
       if (n.mode === 'transient' && s.time >= n.endTime * (1 - 1e-12)) {
         this.status = 'finished';
         break;
@@ -140,7 +180,7 @@ export class Simulation {
    */
   private levelledOff(): boolean {
     const n = this.config.numerics;
-    const h = this.history;
+    const h = this.criterion === 'windward' ? this.windHistory : this.history;
     const W = 800;
     if (h.length < n.startupSteps + 2 * W) return false;
     if (this.drop() < 2.5) return false;
@@ -166,6 +206,51 @@ export class Simulation {
     return out / (fs.rho * fs.V * 2 * this.config.body.radius);
   }
 
+  enthalpyError(): Diagnostics['enthalpyError'] {
+    const m = this.mesh;
+    const { ni, nj } = m;
+    const fs = freestreamOf(this.config);
+    const cp = (this.solver.gamma * this.solver.R) / (this.solver.gamma - 1);
+    const H0 = cp * fs.T + 0.5 * fs.V * fs.V;
+    const n = ni * nj;
+    const p = new Float64Array(n);
+    const err = new Float64Array(n);
+    for (let j = 0; j < nj; j++)
+      for (let i = 0; i < ni; i++) {
+        const q = this.solver.cell(i, j);
+        p[j * ni + i] = q.p;
+        err[j * ni + i] = (cp * q.T + 0.5 * (q.u * q.u + q.v * q.v)) / H0 - 1;
+      }
+    let front = 0;
+    let shock = 0;
+    let max = 0;
+    let maxX = 0;
+    let maxY = 0;
+    let sum = 0;
+    let area = 0;
+    for (let j = 0; j < nj; j++)
+      for (let i = 0; i < ni; i++) {
+        const c = j * ni + i;
+        const e = err[c];
+        if (Math.abs(e) > Math.abs(max)) {
+          max = e;
+          maxX = m.xc[c];
+          maxY = m.yc[c];
+        }
+        sum += Math.abs(e) * m.area[c];
+        area += m.area[c];
+        if (m.xc[c] >= 0) continue;
+        // inside the captured shock: the pressure jumps by more than 20 % to a neighbouring cell
+        let jump = 0;
+        for (const nb of [j * ni + ((i + 1) % ni), j * ni + ((i + ni - 1) % ni), j > 0 ? c - ni : c, j < nj - 1 ? c + ni : c])
+          jump = Math.max(jump, Math.abs(p[nb] - p[c]) / Math.min(p[nb], p[c]));
+        if (jump > 0.2) {
+          if (Math.abs(e) > Math.abs(shock)) shock = e;
+        } else if (Math.abs(e) > Math.abs(front)) front = e;
+      }
+    return { front, shock, max, maxX, maxY, mean: sum / area };
+  }
+
   diagnostics(): Diagnostics {
     const s = this.solver;
     const n = this.config.numerics;
@@ -179,18 +264,26 @@ export class Simulation {
       time: s.time,
       endTime: n.endTime,
       dt: s.lastDt,
-      cfl: n.cfl,
+      cfl: this.cflNow,
+      scheme: this.scheme,
+      limitedCells: s.limitedCells,
       order: s.opts.order,
       startupSteps: n.mode === 'steady' ? n.startupSteps : 0,
       residual: this.history[this.history.length - 1] ?? 0,
       residualRef: this.residualRef,
+      residualWindward: this.windHistory[this.windHistory.length - 1] ?? 0,
+      residualWindwardRef: this.windRef,
       drop: this.drop(),
+      dropDomain: this.dropOf(this.history, this.residualRef),
+      dropWindward: this.dropOf(this.windHistory, this.windRef),
+      criterion: this.criterion,
       targetDrop: n.residualDrop,
       fallbacks: s.fallbacks,
       failure: s.failure,
       msPerStep: this.msPerStep,
       massChange: (s.totals().mass - this.mass0) / this.mass0,
       massImbalance: this.massImbalance(),
+      enthalpyError: this.enthalpyError(),
       warnings: configWarnings(this.config),
     };
   }

@@ -69,6 +69,16 @@ describe('uniform freestream is preserved (free-stream preservation / geometric 
     return worst;
   };
   it('subsonic M = 0.5, first order', () => expect(check(1, freestream(0.5, 288.15, 101325, 0))).toBeLessThan(1e-11));
+  it('implicit LU-SGS step at CFL 20, M = 2, second order', () => {
+    const fs = freestream(2, 250, 10000, -5);
+    const m = makeOGrid({ body: { kind: 'ellipse', radius: 0.5, aspect: 0.6 }, ni: 64, nj: 32, outer: 8, firstSpacing: 0.01 });
+    const s = new EulerSolver(m, base({ order: 2, timeMode: 'local', bc: { imin: 'periodic', imax: 'periodic', jmin: 'farfield', jmax: 'farfield' }, freestream: fs }));
+    s.init(() => fs);
+    for (let k = 0; k < 20; k++) expect(s.stepImplicit(20).ok).toBe(true);
+    let worst = 0;
+    for (let j = 0; j < m.nj; j++) for (let i = 0; i < m.ni; i++) worst = Math.max(worst, Math.abs(s.cell(i, j).p / fs.p - 1), Math.abs(s.cell(i, j).rho / fs.rho - 1));
+    expect(worst).toBeLessThan(1e-11);
+  });
   it('supersonic M = 3, 7° incidence, second order', () => expect(check(2, freestream(3, 220, 2500, 7))).toBeLessThan(1e-11));
 });
 

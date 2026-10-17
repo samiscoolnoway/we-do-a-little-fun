@@ -36,6 +36,7 @@ export interface SnapshotMessage {
   diag: Diagnostics;
   /** residual history, at most ~1000 points (down-sampled evenly by step) */
   history: Float32Array;
+  windHistory: Float32Array;
   historySteps: Float32Array;
 }
 

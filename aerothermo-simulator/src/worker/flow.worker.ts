@@ -22,19 +22,23 @@ function snapshot() {
   const h = sim.history;
   const stride = Math.max(1, Math.ceil(h.length / 1000));
   const n = Math.ceil(h.length / stride);
+  const wh = sim.windHistory;
   const history = new Float32Array(n);
+  const windHistory = new Float32Array(n);
   const historySteps = new Float32Array(n);
   for (let k = 0; k < n; k++) {
     const idx = Math.min(h.length - 1, k * stride);
     history[k] = h[idx];
+    windHistory[k] = wh[idx];
     historySteps[k] = idx + 1;
   }
   if (h.length && historySteps[n - 1] !== h.length) {
     history[n - 1] = h[h.length - 1];
+    windHistory[n - 1] = wh[h.length - 1];
     historySteps[n - 1] = h.length;
   }
-  const transfer = [...Object.values(fields).map((a) => a.buffer), history.buffer, historySteps.buffer];
-  post({ type: 'snapshot', runId, running, fields, surface, diag: sim.diagnostics(), history, historySteps }, transfer);
+  const transfer = [...Object.values(fields).map((a) => a.buffer), history.buffer, windHistory.buffer, historySteps.buffer];
+  post({ type: 'snapshot', runId, running, fields, surface, diag: sim.diagnostics(), history, windHistory, historySteps }, transfer);
 }
 
 function loop() {
