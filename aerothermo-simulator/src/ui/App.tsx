@@ -3,13 +3,15 @@ import { FIELD_INFO, type FieldName } from '../core/simulation';
 import { FlowControls, RunBar } from './Controls';
 import { FlowView } from './FlowView';
 import { store, useStore } from './store';
+import { HeatingPanel } from './HeatingPanel';
 import { ProbePanel, Workbench } from './Workbench';
 import { Toggle } from './widgets';
 
-type Tab = 'workbench' | 'probe';
+type Tab = 'workbench' | 'probe' | 'heating';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'workbench', label: 'Workbench' },
   { id: 'probe', label: 'Probe' },
+  { id: 'heating', label: 'Surface heating' },
 ];
 
 export function App() {
@@ -48,7 +50,7 @@ export function App() {
             </button>
           ))}
         </nav>
-        <div className="tab-body">{tab === 'workbench' ? <Workbench /> : <ProbePanel />}</div>
+        <div className="tab-body">{tab === 'workbench' ? <Workbench /> : tab === 'probe' ? <ProbePanel /> : <HeatingPanel />}</div>
       </aside>
     </div>
   );
