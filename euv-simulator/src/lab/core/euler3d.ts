@@ -17,10 +17,30 @@ import { GAS } from './gas';
  *  - density and pressure are checked after every stage: a non-physical value stops the solver, restores the
  *    state from before the step and records where it happened. Nothing is clipped.
  *
- * Not included (yet): bodies or curved boundaries, far-field characteristic boundaries, implicit time stepping,
- * viscosity, turbulence, heat transfer, a Web Worker or any visualisation. It is not used by the app.
+ * Optional, for steady flow around a body:
+ *  - an immersed sphere, represented with the ghost-cell (reflection) immersed-boundary method: cells whose
+ *    centre lies inside the sphere are solid; the solid cells that the flux stencils of fluid cells reach get a
+ *    ghost state each stage, mirrored across the true sphere surface: ρ and p are interpolated (trilinearly, from
+ *    fluid cells only) at the image point x_I = x_c + 2d·n, and the normal velocity component is reversed. The
+ *    unchanged Cartesian fluxes then see a slip wall with the right orientation. This is not exactly conservative:
+ *    the net mass flux through the body faces is measured every step (bodyMassFlux) and should be judged against
+ *    the mass flux the body intercepts. It neglects the wall-normal pressure gradient from surface curvature;
+ *  - a supersonic-inflow boundary ('inflow': the freestream state in the ghost cells, valid only where the flow
+ *    entering the domain is supersonic);
+ *  - local time stepping (each cell its own CFL step; only the converged steady state is meaningful).
+ *
+ * Not included (yet): other bodies, cut cells, subsonic far-field (characteristic) boundaries, implicit time
+ * stepping, viscosity, turbulence, heat transfer, a Web Worker or any visualisation. It is not used by the app.
  */
-export type BC3D = 'periodic' | 'extrapolate' | 'wall';
+export type BC3D = 'periodic' | 'extrapolate' | 'wall' | 'inflow';
+
+/** sphere immersed in the Cartesian grid: centre and radius, m */
+export interface ImmersedSphere {
+  cx: number;
+  cy: number;
+  cz: number;
+  r: number;
+}
 
 export interface Grid3D {
   nx: number;
@@ -54,6 +74,14 @@ export interface Solver3DOptions {
   cfl: number;
   order: 1 | 2;
   bc: { xmin: BC3D; xmax: BC3D; ymin: BC3D; ymax: BC3D; zmin: BC3D; zmax: BC3D };
+  /** state imposed by 'inflow' boundaries */
+  freestream?: Primitive3D;
+  /** 'global' (default): one time-accurate Δt; 'local': each cell its own Δt (steady states only) */
+  timeMode?: 'global' | 'local';
+  /** optional immersed sphere (ghost-cell immersed boundary) */
+  sphere?: ImmersedSphere;
+  /** optional sub-region for a second residual (e.g. the flow ahead of a body), evaluated at cell centres */
+  residualRegion?: (x: number, y: number, z: number) => boolean;
 }
 
 export interface Failure3D {
@@ -70,15 +98,17 @@ export interface Failure3D {
 export interface Step3DResult {
   ok: boolean;
   dt: number;
-  /** RMS over cells of ∂ρ/∂t at the start of the step, kg/(m³·s) */
+  /** RMS over fluid cells of ∂ρ/∂t at the start of the step, kg/(m³·s) */
   residual: number;
+  /** the same RMS over the fluid cells of `residualRegion` (NaN without one) */
+  residualRegion: number;
 }
 
 const NV = 5;
 
 export class EulerSolver3D {
   readonly grid: Grid3D;
-  readonly opts: Solver3DOptions;
+  opts: Solver3DOptions;
   readonly gamma: number;
   /** padded sizes (two ghost layers on each side) and strides */
   private readonly px: number;
@@ -102,6 +132,21 @@ export class EulerSolver3D {
   /** faces that fell back to first order during the last step */
   fallbacks = 0;
   failure: Failure3D | null = null;
+  /** 1 for cells inside the immersed body (interior index (k·ny + j)·nx + i) */
+  readonly solid: Uint8Array;
+  readonly fluidCells: number;
+  /** net mass flux into the fluid through the immersed-body faces at the start of the last step, kg/s
+   *  (zero for an exactly conservative wall; a measure of the immersed boundary's conservation error) */
+  bodyMassFlux = 0;
+  private dtCell: Float64Array;
+  private region: Uint8Array | null = null;
+  /** ghost cells of the immersed body: padded index, 8 interpolation sources (padded index, weight, velocity
+   *  sign flips for symmetry-plane images) and the outward surface normal */
+  private ghostPad = new Int32Array(0);
+  private srcPad = new Int32Array(0);
+  private srcW = new Float64Array(0);
+  private srcFlip = new Uint8Array(0);
+  private ghostN = new Float64Array(0);
 
   constructor(grid: Grid3D, opts: Solver3DOptions) {
     const { nx, ny, nz } = grid;
@@ -112,6 +157,7 @@ export class EulerSolver3D {
       [opts.bc.zmin, opts.bc.zmax],
     ])
       if ((a === 'periodic') !== (b === 'periodic')) throw new Error('periodic boundaries must be set on both sides of an axis');
+    if (Object.values(opts.bc).includes('inflow') && !opts.freestream) throw new Error("'inflow' boundaries need a freestream state");
     this.grid = grid;
     this.opts = opts;
     this.gamma = opts.gamma ?? GAS.gamma;
@@ -129,6 +175,153 @@ export class EulerSolver3D {
     this.q = mk(3, n);
     this.p = new Float64Array(n);
     this.res = mk(NV, nx * ny * nz);
+    this.solid = new Uint8Array(nx * ny * nz);
+    this.dtCell = new Float64Array(nx * ny * nz);
+    if (opts.sphere) this.buildSphere(opts.sphere);
+    let fluid = 0;
+    for (let c = 0; c < this.solid.length; c++) if (!this.solid[c]) fluid++;
+    this.fluidCells = fluid;
+    if (opts.residualRegion) {
+      this.region = new Uint8Array(nx * ny * nz);
+      for (let k = 0; k < nz; k++)
+        for (let j = 0; j < ny; j++)
+          for (let i = 0; i < nx; i++) {
+            const [x, y, z] = this.centre(i, j, k);
+            this.region[(k * ny + j) * nx + i] = opts.residualRegion(x, y, z) ? 1 : 0;
+          }
+    }
+  }
+
+  /** switch reconstruction order (e.g. after a first-order start-up phase) */
+  setOrder(order: 1 | 2) {
+    this.opts = { ...this.opts, order };
+  }
+
+  isSolid(i: number, j: number, k: number) {
+    return this.solid[(k * this.grid.ny + j) * this.grid.nx + i] === 1;
+  }
+
+  // ───────── immersed sphere (ghost-cell method) ─────────
+  /**
+   * Map a cell index that may lie outside the box back into it: across a slip wall (symmetry plane) by mirroring,
+   * flipping that velocity component; periodic by wrapping; otherwise by clamping (zero-gradient).
+   */
+  private virtualIndex(m: number, n: number, lo: BC3D, hi: BC3D): [number, boolean] {
+    let flip = false;
+    for (let it = 0; it < 4 && (m < 0 || m >= n); it++) {
+      if (m < 0) {
+        if (lo === 'wall') (m = -1 - m), (flip = !flip);
+        else if (lo === 'periodic') m += n;
+        else m = 0;
+      } else if (hi === 'wall') (m = 2 * n - 1 - m), (flip = !flip);
+      else if (hi === 'periodic') m -= n;
+      else m = n - 1;
+    }
+    return [Math.min(n - 1, Math.max(0, m)), flip];
+  }
+
+  private buildSphere(sp: ImmersedSphere) {
+    const { nx, ny, nz, x0, y0, z0, dx, dy, dz } = this.grid;
+    const bc = this.opts.bc;
+    const idx = (i: number, j: number, k: number) => (k * ny + j) * nx + i;
+    for (let k = 0; k < nz; k++)
+      for (let j = 0; j < ny; j++)
+        for (let i = 0; i < nx; i++) {
+          const [x, y, z] = this.centre(i, j, k);
+          if ((x - sp.cx) ** 2 + (y - sp.cy) ** 2 + (z - sp.cz) ** 2 < sp.r * sp.r) this.solid[idx(i, j, k)] = 1;
+        }
+    // ghost cells: solid cells within two cells (along an axis) of a fluid cell, i.e. reached by a flux stencil
+    const ghosts: number[] = [];
+    for (let k = 0; k < nz; k++)
+      for (let j = 0; j < ny; j++)
+        for (let i = 0; i < nx; i++) {
+          if (!this.solid[idx(i, j, k)]) continue;
+          let near = false;
+          for (const [di, dj, dk] of [
+            [1, 0, 0],
+            [0, 1, 0],
+            [0, 0, 1],
+          ])
+            for (const sgn of [-2, -1, 1, 2]) {
+              const a = i + sgn * di;
+              const b = j + sgn * dj;
+              const c = k + sgn * dk;
+              if (a < 0 || b < 0 || c < 0 || a >= nx || b >= ny || c >= nz) continue;
+              if (!this.solid[idx(a, b, c)]) near = true;
+            }
+          if (near) ghosts.push(i, j, k);
+        }
+    const G = ghosts.length / 3;
+    this.ghostPad = new Int32Array(G);
+    this.srcPad = new Int32Array(8 * G);
+    this.srcW = new Float64Array(8 * G);
+    this.srcFlip = new Uint8Array(8 * G);
+    this.ghostN = new Float64Array(3 * G);
+    for (let g = 0; g < G; g++) {
+      const [i, j, k] = [ghosts[3 * g], ghosts[3 * g + 1], ghosts[3 * g + 2]];
+      this.ghostPad[g] = this.P(i, j, k);
+      const [x, y, z] = this.centre(i, j, k);
+      const d = Math.hypot(x - sp.cx, y - sp.cy, z - sp.cz);
+      if (!(d > 1e-12 * sp.r)) throw new Error('the sphere is too small for the grid (a ghost cell lies at its centre)');
+      const n = [(x - sp.cx) / d, (y - sp.cy) / d, (z - sp.cz) / d];
+      this.ghostN.set(n, 3 * g);
+      // image point: the ghost centre mirrored across the surface along the normal
+      const dist = 2 * (sp.r - d);
+      const xi = [x + dist * n[0], y + dist * n[1], z + dist * n[2]];
+      const f = [(xi[0] - x0) / dx - 0.5, (xi[1] - y0) / dy - 0.5, (xi[2] - z0) / dz - 0.5];
+      const b = f.map(Math.floor);
+      const t = f.map((v, a) => v - b[a]);
+      let wsum = 0;
+      for (let c = 0; c < 8; c++) {
+        const o = [c & 1, (c >> 1) & 1, (c >> 2) & 1];
+        const w = (o[0] ? t[0] : 1 - t[0]) * (o[1] ? t[1] : 1 - t[1]) * (o[2] ? t[2] : 1 - t[2]);
+        const [vi, fx] = this.virtualIndex(b[0] + o[0], nx, bc.xmin, bc.xmax);
+        const [vj, fy] = this.virtualIndex(b[1] + o[1], ny, bc.ymin, bc.ymax);
+        const [vk, fz] = this.virtualIndex(b[2] + o[2], nz, bc.zmin, bc.zmax);
+        if (this.solid[idx(vi, vj, vk)] || w <= 0) continue;
+        this.srcPad[8 * g + c] = this.P(vi, vj, vk);
+        this.srcW[8 * g + c] = w;
+        this.srcFlip[8 * g + c] = (fx ? 1 : 0) | (fy ? 2 : 0) | (fz ? 4 : 0);
+        wsum += w;
+      }
+      if (wsum < 1e-6) throw new Error(`no fluid cell around the image point of ghost cell (${i}, ${j}, ${k}); refine the grid`);
+      for (let c = 0; c < 8; c++) this.srcW[8 * g + c] /= wsum;
+    }
+  }
+
+  /** ghost states of the immersed body from the current fluid primitives (fluid sources only: order-independent) */
+  private applySphereGhosts() {
+    const [U, V, W] = this.q;
+    const R = this.r;
+    const Pp = this.p;
+    for (let g = 0; g < this.ghostPad.length; g++) {
+      let rho = 0;
+      let p = 0;
+      let u = 0;
+      let v = 0;
+      let w = 0;
+      for (let c = 8 * g; c < 8 * g + 8; c++) {
+        const wt = this.srcW[c];
+        if (wt === 0) continue;
+        const s = this.srcPad[c];
+        const fl = this.srcFlip[c];
+        rho += wt * R[s];
+        p += wt * Pp[s];
+        u += wt * (fl & 1 ? -U[s] : U[s]);
+        v += wt * (fl & 2 ? -V[s] : V[s]);
+        w += wt * (fl & 4 ? -W[s] : W[s]);
+      }
+      const nx = this.ghostN[3 * g];
+      const ny = this.ghostN[3 * g + 1];
+      const nz = this.ghostN[3 * g + 2];
+      const vn = u * nx + v * ny + w * nz;
+      const d = this.ghostPad[g];
+      R[d] = rho;
+      Pp[d] = p;
+      U[d] = u - 2 * vn * nx;
+      V[d] = v - 2 * vn * ny;
+      W[d] = w - 2 * vn * nz;
+    }
   }
 
   /** padded index of cell (i, j, k); each index may range over −2 … n+1 */
@@ -169,10 +362,13 @@ export class EulerSolver3D {
     const g1 = this.gamma - 1;
     const [R, MU, MV, MW, E] = this.U;
     const [u, v, w] = this.q;
+    const solid = this.solid;
     for (let k = 0; k < nz; k++)
       for (let j = 0; j < ny; j++) {
         let c = this.P(0, j, k);
-        for (let i = 0; i < nx; i++, c++) {
+        let ci = (k * ny + j) * nx;
+        for (let i = 0; i < nx; i++, c++, ci++) {
+          if (solid[ci]) continue;
           const rho = R[c];
           const uu = MU[c] / rho;
           const vv = MV[c] / rho;
@@ -202,6 +398,15 @@ export class EulerSolver3D {
   }
 
   // ───────── boundary conditions (ghost cells) ─────────
+  private setFreestream(dst: number) {
+    const fs = this.opts.freestream!;
+    this.r[dst] = fs.rho;
+    this.p[dst] = fs.p;
+    this.q[0][dst] = fs.u;
+    this.q[1][dst] = fs.v;
+    this.q[2][dst] = fs.w;
+  }
+
   private copyCell(src: number, dst: number, flipAxis = -1) {
     this.r[dst] = this.r[src];
     this.p[dst] = this.p[src];
@@ -229,6 +434,9 @@ export class EulerSolver3D {
         if (lo === 'wall') {
           this.copyCell(cell(0), cell(-1), axis);
           this.copyCell(cell(1), cell(-2), axis);
+        } else if (lo === 'inflow') {
+          this.setFreestream(cell(-1));
+          this.setFreestream(cell(-2));
         } else {
           this.copyCell(cell(0), cell(-1));
           this.copyCell(cell(0), cell(-2));
@@ -236,6 +444,9 @@ export class EulerSolver3D {
         if (hi === 'wall') {
           this.copyCell(cell(n - 1), cell(n), axis);
           this.copyCell(cell(n - 2), cell(n + 1), axis);
+        } else if (hi === 'inflow') {
+          this.setFreestream(cell(n));
+          this.setFreestream(cell(n + 1));
         } else {
           this.copyCell(cell(n - 1), cell(n));
           this.copyCell(cell(n - 1), cell(n + 1));
@@ -248,6 +459,13 @@ export class EulerSolver3D {
     this.fillAxis(0, bc.xmin, bc.xmax);
     this.fillAxis(1, bc.ymin, bc.ymax);
     this.fillAxis(2, bc.zmin, bc.zmax);
+    if (this.ghostPad.length) {
+      this.applySphereGhosts();
+      // domain ghost layers next to body ghost cells (on symmetry planes) mirror the new ghost states
+      this.fillAxis(0, bc.xmin, bc.xmax);
+      this.fillAxis(1, bc.ymin, bc.ymax);
+      this.fillAxis(2, bc.zmin, bc.zmax);
+    }
   }
 
   // ───────── numerical flux ─────────
@@ -306,18 +524,27 @@ export class EulerSolver3D {
     f[4] = 0.5 * ((EL + pL) * unL + (ER + pR) * unR - lam * (ER - EL)) * area;
   }
 
-  /** residual R(U) = −Σ F·n A over the faces of every interior cell */
+  /**
+   * residual R(U) = −Σ F·n A over the faces of every fluid cell. Faces between two solid cells are skipped; faces
+   * between a fluid and a solid (ghost) cell carry the immersed-boundary flux, whose mass part is summed into
+   * `lastBodyFlux` (into the fluid, kg/s).
+   */
+  private lastBodyFlux = 0;
   private computeResidual() {
     const { nx, ny, nz, dx, dy, dz } = this.grid;
     const res = this.res;
+    const solid = this.solid;
     for (let v = 0; v < NV; v++) res[v].fill(0);
     const f = this.f;
     const dims = [nx, ny, nz];
     const strides = [1, this.sy, this.sz];
+    const offsets = [1, nx, nx * ny];
     const areas = [dy * dz, dx * dz, dx * dy];
+    let body = 0;
     for (let axis = 0; axis < 3; axis++) {
       const s = strides[axis];
       const n = dims[axis];
+      const off = offsets[axis];
       for (let k = 0; k < nz; k++)
         for (let j = 0; j < ny; j++)
           for (let i = 0; i < nx; i++) {
@@ -325,18 +552,21 @@ export class EulerSolver3D {
             const m = axis === 0 ? i : axis === 1 ? j : k;
             const c = (k * ny + j) * nx + i;
             const pc = this.P(i, j, k);
-            this.faceFlux(axis, pc - 2 * s, pc - s, pc, pc + s, areas[axis]);
-            for (let v = 0; v < NV; v++) res[v][c] += f[v];
-            if (m > 0) {
-              const cl = c - (axis === 0 ? 1 : axis === 1 ? nx : nx * ny);
-              for (let v = 0; v < NV; v++) res[v][cl] -= f[v];
+            const sc = solid[c];
+            const sl = m > 0 ? solid[c - off] : sc;
+            if (!(sc && sl)) {
+              this.faceFlux(axis, pc - 2 * s, pc - s, pc, pc + s, areas[axis]);
+              if (!sc) for (let v = 0; v < NV; v++) res[v][c] += f[v];
+              if (m > 0 && !sl) for (let v = 0; v < NV; v++) res[v][c - off] -= f[v];
+              if (m > 0 && sc !== sl) body += sc ? -f[0] : f[0];
             }
-            if (m === n - 1) {
+            if (m === n - 1 && !sc) {
               this.faceFlux(axis, pc - s, pc, pc + s, pc + 2 * s, areas[axis]);
               for (let v = 0; v < NV; v++) res[v][c] -= f[v];
             }
           }
     }
+    this.lastBodyFlux = body;
   }
 
   /** global CFL time step from the current primitive arrays */
@@ -345,30 +575,37 @@ export class EulerSolver3D {
     const g = this.gamma;
     const [U, V, W] = this.q;
     let smax = 0;
+    const cfl = this.opts.cfl;
     for (let k = 0; k < nz; k++)
       for (let j = 0; j < ny; j++) {
         let c = this.P(0, j, k);
-        for (let i = 0; i < nx; i++, c++) {
+        let ci = (k * ny + j) * nx;
+        for (let i = 0; i < nx; i++, c++, ci++) {
+          if (this.solid[ci]) continue;
           const a = Math.sqrt((g * this.p[c]) / this.r[c]);
           const s = (Math.abs(U[c]) + a) / dx + (Math.abs(V[c]) + a) / dy + (Math.abs(W[c]) + a) / dz;
+          this.dtCell[ci] = cfl / s;
           if (s > smax) smax = s;
         }
       }
-    return this.opts.cfl / smax;
+    return cfl / smax;
   }
 
   private copyState(src: Float64Array[], dst: Float64Array[]) {
     for (let v = 0; v < NV; v++) dst[v].set(src[v]);
   }
 
-  /** U ← a·U0 + b·(U + Δt/V · R) over the interior */
+  /** U ← a·U0 + b·(U + Δt/V · R) over the fluid cells (Δt = the global step, or each cell's own in local mode) */
   private update(dt: number, a: number, b: number) {
     const { nx, ny, nz, dx, dy, dz } = this.grid;
-    const kv = dt / (dx * dy * dz);
+    const vol = dx * dy * dz;
+    const local = this.opts.timeMode === 'local';
     for (let k = 0; k < nz; k++)
       for (let j = 0; j < ny; j++)
         for (let i = 0; i < nx; i++) {
           const c = (k * ny + j) * nx + i;
+          if (this.solid[c]) continue;
+          const kv = (local ? this.dtCell[c] : dt) / vol;
           const pc = this.P(i, j, k);
           for (let v = 0; v < NV; v++) this.U[v][pc] = a * this.U0[v][pc] + b * (this.U[v][pc] + kv * this.res[v][c]);
         }
@@ -379,7 +616,7 @@ export class EulerSolver3D {
    * and `failure` says where; later calls do nothing until `init` is called again.
    */
   step(maxDt = Infinity): Step3DResult {
-    if (this.failure) return { ok: false, dt: 0, residual: NaN };
+    if (this.failure) return { ok: false, dt: 0, residual: NaN, residualRegion: NaN };
     const { nx, ny, nz, dx, dy, dz } = this.grid;
     this.copyState(this.U, this.Ubackup);
     this.fallbacks = 0;
@@ -391,10 +628,22 @@ export class EulerSolver3D {
       return this.abort();
     }
     this.computeResidual();
+    this.bodyMassFlux = this.lastBodyFlux;
     const vol = dx * dy * dz;
     let s2 = 0;
-    for (let c = 0; c < nx * ny * nz; c++) s2 += (this.res[0][c] / vol) ** 2;
-    const residual = Math.sqrt(s2 / (nx * ny * nz));
+    let r2 = 0;
+    let nr = 0;
+    for (let c = 0; c < nx * ny * nz; c++) {
+      if (this.solid[c]) continue;
+      const d2 = (this.res[0][c] / vol) ** 2;
+      s2 += d2;
+      if (this.region && this.region[c]) {
+        r2 += d2;
+        nr++;
+      }
+    }
+    const residual = Math.sqrt(s2 / this.fluidCells);
+    const residualRegion = nr ? Math.sqrt(r2 / nr) : NaN;
     this.copyState(this.U, this.U0);
     this.update(dt, 0, 1); // U1 = Un + Δt R(Un)
     if (!this.toPrimitive(1)) return this.abort();
@@ -403,9 +652,9 @@ export class EulerSolver3D {
     this.update(dt, 0.5, 0.5); // Un+1 = ½ Un + ½ (U1 + Δt R(U1))
     if (!this.toPrimitive(2)) return this.abort();
     this.steps++;
-    this.time += dt;
+    if (this.opts.timeMode !== 'local') this.time += dt;
     this.lastDt = dt;
-    return { ok: true, dt, residual };
+    return { ok: true, dt, residual, residualRegion };
   }
 
   stepTo(t: number): Step3DResult {
@@ -414,7 +663,7 @@ export class EulerSolver3D {
 
   private abort(): Step3DResult {
     this.copyState(this.Ubackup, this.U);
-    return { ok: false, dt: 0, residual: NaN };
+    return { ok: false, dt: 0, residual: NaN, residualRegion: NaN };
   }
 
   // ───────── read-out ─────────
@@ -428,7 +677,7 @@ export class EulerSolver3D {
     return { rho, u, v, w, p, T: p / (rho * GAS.R), mach: Math.sqrt(u * u + v * v + w * w) / Math.sqrt((this.gamma * p) / rho) };
   }
 
-  /** Σ U·V over the domain: mass kg, momentum kg·m/s, energy J */
+  /** Σ U·V over the fluid cells: mass kg, momentum kg·m/s, energy J */
   totals() {
     const { nx, ny, nz, dx, dy, dz } = this.grid;
     const vol = dx * dy * dz;
@@ -436,6 +685,7 @@ export class EulerSolver3D {
     for (let k = 0; k < nz; k++)
       for (let j = 0; j < ny; j++)
         for (let i = 0; i < nx; i++) {
+          if (this.solid[(k * ny + j) * nx + i]) continue;
           const c = this.P(i, j, k);
           for (let v = 0; v < NV; v++) t[v] += this.U[v][c] * vol;
         }

@@ -157,3 +157,45 @@ Its tests (`tests/lab/euler3d.test.ts`) check exact properties and the exact Rie
 - an unstable CFL number is detected and reported, and the last valid state is kept.
 
 This verifies the implementation; it is not a validation against experiment.
+
+### Supersonic sphere (prototype, `src/lab/core/sphere3d.ts`)
+
+The 3D prototype can now represent a sphere with a **ghost-cell (reflection) immersed boundary**:
+
+- **Solid cells:** cells whose centre lies inside the sphere are solid.
+- **Ghost states:** each stage, the solid cells reached by the flux stencils get a state mirrored across the true sphere surface. ρ and p are interpolated at the image point, and the normal velocity is reversed. The Cartesian fluxes then see a slip wall with the correct orientation.
+
+Its limitations:
+
+- **Not exactly conservative:** the net mass flux through the body faces is measured every step.
+- **Curvature neglected:** the wall-normal pressure gradient from curvature is ignored.
+- **First-order geometry:** the surface location is only first-order accurate.
+
+A stair-stepped (voxelised) wall would be conservative, but every step would act as a small forward-facing corner. Cut cells would be better than both, but they are a larger change.
+
+**Case set-up:**
+
+- **Domain:** a quarter domain, using the planes y = 0 and z = 0 as symmetry planes.
+- **Boundaries:** supersonic inflow upstream; extrapolation downstream and laterally.
+- **Domain size:** 2 R upstream, 1.5 R downstream and 2.5 R laterally of the centre.
+- **Flow:** T∞ = 220 K, p∞ = 2500 Pa.
+- **Numerics:** CFL 0.8 with local time steps; 150 first-order start-up steps, then second order (minmod).
+- **Convergence criterion:** the residual ahead of the sphere centre has dropped 4 orders.
+
+| Mach | R/h | cells | steps | p_stag / pitot | T_stag / T₀ | Δ/R (Billig) | net body mass flux | y↔z symmetry |
+|---|---|---|---|---|---|---|---|---|
+| 2 | 8 | 11 200 | 620 | 0.946 | 1.019 | 0.429 (0.321) | 6.95 % | 3e-13 |
+| 2 | 12 | 37 800 | 850 | 0.965 | 1.015 | 0.404 (0.321) | 4.41 % | 3e-10 |
+| 2 | 16 | 89 600 | 1110 | 0.976 | 1.011 | 0.394 (0.321) | 3.00 % | 1e-8 |
+| 3 | 16 | 89 600 | 732 | 0.956 | 1.017 | 0.255 (0.205) | 3.29 % | 2e-9 |
+
+Notes on the table:
+
+- **Body mass flux** is given relative to the mass flux the body intercepts, ρ∞V∞πR²/4.
+- **Convergence order:** at Mach 2 the errors fall at about first order with refinement.
+- **Standoff:** linear extrapolation of the standoff gives about 0.36 R, roughly 13 % above Billig's correlation. That is a discrepancy, not an agreement. The 2D cylinder solver shows a similar +10 % against Billig's cylinder correlation.
+- **Shock width:** the captured shock is 2.5–2.7 cells wide, so at Mach 3 the shock layer (0.2 R) spans only about 3 cells on this grid.
+- **Exact vs empirical checks:** the pitot pressure, T₀, symmetry and undisturbed upstream flow are exact references for inviscid flow. Billig's standoff is an empirical correlation from experiments.
+- **Not compared:** drag, base flow, wake and heat transfer are not meaningful for this inviscid solver.
+
+These results verify that the method converges towards the exact references. They are not a validation, and the coarse-grid shock positions are not reliable predictions.
