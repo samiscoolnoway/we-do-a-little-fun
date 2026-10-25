@@ -1,0 +1,738 @@
+{
+ "schema": "euv-sphere3d-browser-dataset",
+ "version": 1,
+ "description": "Precomputed 3D Mach 2 sphere results for the browser (milestone M0): planes next to the symmetry plane from converged checkpoints, archived stagnation-line profiles, refinement and uncertainty results, the axisymmetric reference band and the Billig correlation. Every value is computed by the archived solver runs, copied from their archives, or quoted with its source.",
+ "generator": {
+  "script": "scripts/export-sphere3d-dataset.test.ts",
+  "library": "scripts/sphere3d-dataset.ts",
+  "provenance": {
+   "repositoryHead": "242f05b0139492c0e018e4fa9305e0f740aa9f20",
+   "files": [
+    {
+     "path": "scripts/sphere3d-dataset.ts",
+     "gitBlob": "599103a9c6ee8300d3746762dd27a8b04ad9f8cd",
+     "sameAsHead": false
+    },
+    {
+     "path": "scripts/export-sphere3d-dataset.test.ts",
+     "gitBlob": "c2d1c6a79101502b69e72883367e65cd528046ef",
+     "sameAsHead": false
+    },
+    {
+     "path": "src/lab/core/euler3d.ts",
+     "gitBlob": "4dcd871b23fbb07097ea3096a07025bff995e512",
+     "sameAsHead": true
+    },
+    {
+     "path": "src/lab/core/sphere3d.ts",
+     "gitBlob": "dc5db52acd3bce54ab69c64a649bcd7bc3f084f7",
+     "sameAsHead": true
+    },
+    {
+     "path": "src/lab/core/checkpoint3d.ts",
+     "gitBlob": "a2a6900c2d86737a92c89a90a0d2a767bc545d2f",
+     "sameAsHead": true
+    },
+    {
+     "path": "src/lab/core/gas.ts",
+     "gitBlob": "043990b74c4c85378010de4e34fec84572a1ad2b",
+     "sameAsHead": true
+    }
+   ],
+   "solverStateRevision": 1
+  }
+ },
+ "units": "lengths in sphere radii (the solver uses R = 1); fields nondimensional by the freestream values in results.json",
+ "browserFacing": [
+  "results.json",
+  "profiles.json",
+  "plane-rh48-off0.5.u8.bin",
+  "plane-rh64-off0.u8.bin"
+ ],
+ "sourcePrecision": [
+  "plane-rh48-off0.25.f64.bin",
+  "plane-rh48-off0.5.f64.bin",
+  "plane-rh48-off0.75.f64.bin",
+  "plane-rh64-off0.f64.bin"
+ ],
+ "notExported": [
+  {
+   "what": "symmetry-plane fields of R/h 48 at grid offset 0",
+   "why": "no checkpoint exists (the archived run predates checkpoint support); its stagnation-line profile and results are included"
+  }
+ ],
+ "planes": [
+  {
+   "id": "rh48-off0.5",
+   "source": {
+    "checkpoint": "/tmp/claude-0/-home-user-we-do-a-little-fun/a9a8aa8b-8763-537e-92e3-eb4147606626/scratchpad/rh48-offsets/off0.5/rh48.ckpt",
+    "checkpointBytes": 49625378,
+    "checkpointSha256": "d9df7d53f77e82a2b02cd412f226a80ebdccc6a45ece6f39cd7eb916d86e12d0",
+    "checkpointStep": 3000,
+    "solverStateRevision": 1,
+    "geometryCrc32": 882346152,
+    "archivedSummary": "docs/sphere3d-rh48-offsets/off0.5/summary.jsonl",
+    "archivedSummarySha256": "9f198446182962b2bcee0c65a41c7313b393ba95edfe3ee452f5bcdfc8e21cf7"
+   },
+   "configuration": {
+    "mach": 2,
+    "radiusCells": 48,
+    "upstream": 2,
+    "downstream": 0.5,
+    "lateral": 2,
+    "gridOffset": 0.5,
+    "cfl": 0.8,
+    "wall": "cutcell",
+    "reconstruction": null,
+    "merge": null,
+    "flux": "rusanov",
+    "Tinf": 220,
+    "pinf": 2500,
+    "startupSteps": 150,
+    "residualDrop": 4,
+    "massBalanceTol": 0.001,
+    "maxSteps": 20000
+   },
+   "convergence": {
+    "rule": "residual in x < 0 down 4 orders from its largest value in the first 5 steps, and |net mass flux| < 0.001 of the intercepted flux ρ∞V∞πR²/4 (sphere3d.ts runSphereCase)",
+    "advancedFromStep": 3000,
+    "convergedAtStep": 3018,
+    "dropFront": 4.00034280429262,
+    "massImbalance": 0.0007124883739175542,
+    "reproducesArchivedRun": [
+     "steps",
+     "dropFront",
+     "massImbalance",
+     "symmetryError",
+     "xNose",
+     "standoff.foot",
+     "standoff.mid",
+     "standoff.tail",
+     "standoff.maxGradient",
+     "standoff.equalArea"
+    ]
+   },
+   "grid": {
+    "nx": 120,
+    "ny": 96,
+    "h": 0.020833333333333332,
+    "x0": -2.0104166666666665,
+    "cellCentres": "x_i = x0 + (i + ½) h, y_j = (j + ½) h, z = ½ h",
+    "sphere": "centre (0, 0, 0), radius R = 1; flow in +x; quarter domain y ≥ 0, z ≥ 0 with symmetry (slip) planes y = 0 and z = 0",
+    "cells": {
+     "total": 11520,
+     "solid": 2835,
+     "cut": 107,
+     "full": 8578
+    }
+   },
+   "extraction": {
+    "plane": "cell layer k = 0 (centres at z = h/2), the layer next to the z = 0 symmetry plane",
+    "mirrorCheck": "max |field(i, j, k = 0) − field(i, k = 0, j)| against the j = 0 layer (v and w swapped); a subset of the archived symmetry error",
+    "mirrorMaxAbsDifference": {
+     "rho": 1.1688428003253648e-12,
+     "u": 3.2718272535703363e-13,
+     "v": 2.9626995301512693e-13,
+     "w": 7.473924257261899e-12,
+     "p": 1.7750245717707003e-12,
+     "alpha": 0
+    },
+    "archivedSymmetryError": 0.000001139443304056853
+   },
+   "detectors": {
+    "xNose": -0.9998914871680382,
+    "foot": 0.39100342874344096,
+    "mid": 0.35880367585344763,
+    "tail": 0.3296362693840429,
+    "maxGradient": 0.35830888920605797,
+    "equalArea": 0.3596050442242109
+   },
+   "f64": {
+    "file": "plane-rh48-off0.5.f64.bin",
+    "layout": "six Float64 arrays (little-endian) in the order of fields, each nx·ny values, index j·nx + i; solid cells (alpha = 0) hold 0",
+    "fields": [
+     {
+      "name": "rho",
+      "definition": "ρ / ρ∞",
+      "unit": "1"
+     },
+     {
+      "name": "u",
+      "definition": "u / V∞ (x, the freestream direction)",
+      "unit": "1"
+     },
+     {
+      "name": "v",
+      "definition": "v / V∞ (y)",
+      "unit": "1"
+     },
+     {
+      "name": "w",
+      "definition": "w / V∞ (z, normal to the plane; small next to the symmetry plane)",
+      "unit": "1"
+     },
+     {
+      "name": "p",
+      "definition": "p / p∞",
+      "unit": "1"
+     },
+     {
+      "name": "alpha",
+      "definition": "fluid volume fraction of the cell (0 = inside the sphere, 1 = full fluid cell, between: cut cell)",
+      "unit": "1"
+     }
+    ]
+   },
+   "u8": {
+    "file": "plane-rh48-off0.5.u8.bin",
+    "layout": "six Uint8 arrays in the order of fields, each nx·ny values, index j·nx + i",
+    "fields": [
+     {
+      "name": "rho",
+      "definition": "ρ / ρ∞",
+      "unit": "1",
+      "lo": 0.2014032569683959,
+      "hi": 3.1057369332085667,
+      "step": 0.011389543828392827,
+      "maxAbsError": 0.005694155826685865,
+      "bound": 0.005694771914196413
+     },
+     {
+      "name": "p",
+      "definition": "p / p∞",
+      "unit": "1",
+      "lo": 0.1343741798922922,
+      "hi": 5.615582983973765,
+      "step": 0.02149493648659401,
+      "maxAbsError": 0.010746830423276066,
+      "bound": 0.010747468243297005
+     },
+     {
+      "name": "mach",
+      "definition": "|V| / a, a = √(γ p / ρ), from the full-precision state",
+      "unit": "1",
+      "lo": 0.018613860022478158,
+      "hi": 2.8442765665352305,
+      "step": 0.011081030221618635,
+      "maxAbsError": 0.005539264307462766,
+      "bound": 0.005540515110809318
+     },
+     {
+      "name": "u",
+      "definition": "u / V∞",
+      "unit": "1",
+      "lo": 0.0012137125916907143,
+      "hi": 1.0958523207613318,
+      "step": 0.004292700424194671,
+      "maxAbsError": 0.0021463496328537612,
+      "bound": 0.0021463502120973353
+     },
+     {
+      "name": "v",
+      "definition": "v / V∞",
+      "unit": "1",
+      "lo": -0.4769022383551202,
+      "hi": 0.3998439644520411,
+      "step": 0.0034382204031653384,
+      "maxAbsError": 0.0017184522845037006,
+      "bound": 0.0017191102015826692
+     },
+     {
+      "name": "alpha",
+      "definition": "fluid volume fraction: code 0 = solid, otherwise max(1, round(255·α))",
+      "unit": "1",
+      "lo": 0,
+      "hi": 1,
+      "step": 0.00392156862745098,
+      "maxAbsError": 0.0019607843137254832,
+      "bound": 0.00392156862745098
+     }
+    ]
+   }
+  },
+  {
+   "id": "rh48-off0.25",
+   "source": {
+    "checkpoint": "/tmp/claude-0/-home-user-we-do-a-little-fun/a9a8aa8b-8763-537e-92e3-eb4147606626/scratchpad/rh48-offsets/off0.25/rh48.ckpt",
+    "checkpointBytes": 49625388,
+    "checkpointSha256": "1afb721acd2daa7ded1b4ee0d041361f81dcda8a9f7cb64d57d55e27dc47e8c1",
+    "checkpointStep": 3000,
+    "solverStateRevision": 1,
+    "geometryCrc32": 2447815639,
+    "archivedSummary": "docs/sphere3d-rh48-offsets/off0.25/summary.jsonl",
+    "archivedSummarySha256": "e4e18b25026caf0a1b44f304b86fd80211d620073a11fd100597d1ae8603c2e6"
+   },
+   "configuration": {
+    "mach": 2,
+    "radiusCells": 48,
+    "upstream": 2,
+    "downstream": 0.5,
+    "lateral": 2,
+    "gridOffset": 0.25,
+    "cfl": 0.8,
+    "wall": "cutcell",
+    "reconstruction": null,
+    "merge": null,
+    "flux": "rusanov",
+    "Tinf": 220,
+    "pinf": 2500,
+    "startupSteps": 150,
+    "residualDrop": 4,
+    "massBalanceTol": 0.001,
+    "maxSteps": 20000
+   },
+   "convergence": {
+    "rule": "residual in x < 0 down 4 orders from its largest value in the first 5 steps, and |net mass flux| < 0.001 of the intercepted flux ρ∞V∞πR²/4 (sphere3d.ts runSphereCase)",
+    "advancedFromStep": 3000,
+    "convergedAtStep": 3015,
+    "dropFront": 4.000037307512781,
+    "massImbalance": 0.0007121125311601171,
+    "reproducesArchivedRun": [
+     "steps",
+     "dropFront",
+     "massImbalance",
+     "symmetryError",
+     "xNose",
+     "standoff.foot",
+     "standoff.mid",
+     "standoff.tail",
+     "standoff.maxGradient",
+     "standoff.equalArea"
+    ]
+   },
+   "grid": {
+    "nx": 120,
+    "ny": 96,
+    "h": 0.020833333333333332,
+    "x0": -2.0052083333333335,
+    "cellCentres": "x_i = x0 + (i + ½) h, y_j = (j + ½) h, z = ½ h",
+    "sphere": "centre (0, 0, 0), radius R = 1; flow in +x; quarter domain y ≥ 0, z ≥ 0 with symmetry (slip) planes y = 0 and z = 0",
+    "cells": {
+     "total": 11520,
+     "solid": 2844,
+     "cut": 109,
+     "full": 8567
+    }
+   },
+   "extraction": {
+    "plane": "cell layer k = 0 (centres at z = h/2), the layer next to the z = 0 symmetry plane",
+    "mirrorCheck": "max |field(i, j, k = 0) − field(i, k = 0, j)| against the j = 0 layer (v and w swapped); a subset of the archived symmetry error",
+    "mirrorMaxAbsDifference": {
+     "rho": 2.262412479581144e-12,
+     "u": 6.479261571712414e-13,
+     "v": 1.8601786777594498e-13,
+     "w": 3.4693209676611714e-12,
+     "p": 3.678390925188069e-12,
+     "alpha": 0
+    },
+    "archivedSymmetryError": 5.158609510927115e-7
+   },
+   "detectors": {
+    "xNose": -0.9998914871680382,
+    "foot": 0.3892909258958197,
+    "mid": 0.3587808336205207,
+    "tail": 0.32966322433955164,
+    "maxGradient": 0.35838456459762,
+    "equalArea": 0.35956876173193364
+   },
+   "f64": {
+    "file": "plane-rh48-off0.25.f64.bin",
+    "layout": "six Float64 arrays (little-endian) in the order of fields, each nx·ny values, index j·nx + i; solid cells (alpha = 0) hold 0",
+    "fields": [
+     {
+      "name": "rho",
+      "definition": "ρ / ρ∞",
+      "unit": "1"
+     },
+     {
+      "name": "u",
+      "definition": "u / V∞ (x, the freestream direction)",
+      "unit": "1"
+     },
+     {
+      "name": "v",
+      "definition": "v / V∞ (y)",
+      "unit": "1"
+     },
+     {
+      "name": "w",
+      "definition": "w / V∞ (z, normal to the plane; small next to the symmetry plane)",
+      "unit": "1"
+     },
+     {
+      "name": "p",
+      "definition": "p / p∞",
+      "unit": "1"
+     },
+     {
+      "name": "alpha",
+      "definition": "fluid volume fraction of the cell (0 = inside the sphere, 1 = full fluid cell, between: cut cell)",
+      "unit": "1"
+     }
+    ]
+   },
+   "u8": null
+  },
+  {
+   "id": "rh48-off0.75",
+   "source": {
+    "checkpoint": "/tmp/claude-0/-home-user-we-do-a-little-fun/a9a8aa8b-8763-537e-92e3-eb4147606626/scratchpad/rh48-offsets/off0.75/rh48.ckpt",
+    "checkpointBytes": 49625371,
+    "checkpointSha256": "4d39640689f66444a0f3d577a536bf3fd7ed5f2f7f826c787b996c7572c367d4",
+    "checkpointStep": 3000,
+    "solverStateRevision": 1,
+    "geometryCrc32": 2130463882,
+    "archivedSummary": "docs/sphere3d-rh48-offsets/off0.75/summary.jsonl",
+    "archivedSummarySha256": "26a11291e5fc600fd4ae92b2a276f0ac490683a8bf9f09c961643a47f55b4e69"
+   },
+   "configuration": {
+    "mach": 2,
+    "radiusCells": 48,
+    "upstream": 2,
+    "downstream": 0.5,
+    "lateral": 2,
+    "gridOffset": 0.75,
+    "cfl": 0.8,
+    "wall": "cutcell",
+    "reconstruction": null,
+    "merge": null,
+    "flux": "rusanov",
+    "Tinf": 220,
+    "pinf": 2500,
+    "startupSteps": 150,
+    "residualDrop": 4,
+    "massBalanceTol": 0.001,
+    "maxSteps": 20000
+   },
+   "convergence": {
+    "rule": "residual in x < 0 down 4 orders from its largest value in the first 5 steps, and |net mass flux| < 0.001 of the intercepted flux ρ∞V∞πR²/4 (sphere3d.ts runSphereCase)",
+    "advancedFromStep": 3000,
+    "convergedAtStep": 3020,
+    "dropFront": 4.000501821264869,
+    "massImbalance": 0.0007064666486021586,
+    "reproducesArchivedRun": [
+     "steps",
+     "dropFront",
+     "massImbalance",
+     "symmetryError",
+     "xNose",
+     "standoff.foot",
+     "standoff.mid",
+     "standoff.tail",
+     "standoff.maxGradient",
+     "standoff.equalArea"
+    ]
+   },
+   "grid": {
+    "nx": 120,
+    "ny": 96,
+    "h": 0.020833333333333332,
+    "x0": -2.015625,
+    "cellCentres": "x_i = x0 + (i + ½) h, y_j = (j + ½) h, z = ½ h",
+    "sphere": "centre (0, 0, 0), radius R = 1; flow in +x; quarter domain y ≥ 0, z ≥ 0 with symmetry (slip) planes y = 0 and z = 0",
+    "cells": {
+     "total": 11520,
+     "solid": 2827,
+     "cut": 106,
+     "full": 8587
+    }
+   },
+   "extraction": {
+    "plane": "cell layer k = 0 (centres at z = h/2), the layer next to the z = 0 symmetry plane",
+    "mirrorCheck": "max |field(i, j, k = 0) − field(i, k = 0, j)| against the j = 0 layer (v and w swapped); a subset of the archived symmetry error",
+    "mirrorMaxAbsDifference": {
+     "rho": 3.289590821964339e-12,
+     "u": 7.182032746300138e-13,
+     "v": 4.47350489984899e-13,
+     "w": 3.730637218417321e-12,
+     "p": 5.295985872066922e-12,
+     "alpha": 0
+    },
+    "archivedSymmetryError": 0.0000037117332860059583
+   },
+   "detectors": {
+    "xNose": -0.9998914871680382,
+    "foot": 0.390326942522194,
+    "mid": 0.35809478145054885,
+    "tail": 0.32819797377981574,
+    "maxGradient": 0.3570353461608373,
+    "equalArea": 0.35914692486762956
+   },
+   "f64": {
+    "file": "plane-rh48-off0.75.f64.bin",
+    "layout": "six Float64 arrays (little-endian) in the order of fields, each nx·ny values, index j·nx + i; solid cells (alpha = 0) hold 0",
+    "fields": [
+     {
+      "name": "rho",
+      "definition": "ρ / ρ∞",
+      "unit": "1"
+     },
+     {
+      "name": "u",
+      "definition": "u / V∞ (x, the freestream direction)",
+      "unit": "1"
+     },
+     {
+      "name": "v",
+      "definition": "v / V∞ (y)",
+      "unit": "1"
+     },
+     {
+      "name": "w",
+      "definition": "w / V∞ (z, normal to the plane; small next to the symmetry plane)",
+      "unit": "1"
+     },
+     {
+      "name": "p",
+      "definition": "p / p∞",
+      "unit": "1"
+     },
+     {
+      "name": "alpha",
+      "definition": "fluid volume fraction of the cell (0 = inside the sphere, 1 = full fluid cell, between: cut cell)",
+      "unit": "1"
+     }
+    ]
+   },
+   "u8": null
+  },
+  {
+   "id": "rh64-off0",
+   "source": {
+    "checkpoint": "/tmp/claude-0/-home-user-we-do-a-little-fun/a9a8aa8b-8763-537e-92e3-eb4147606626/scratchpad/rh64-run/rh64.ckpt",
+    "checkpointBytes": 114334802,
+    "checkpointSha256": "1f9a633d5d9eba7139b0316053497efad8b1b1406d794b31b5dc7e9aa2eb89a2",
+    "checkpointStep": 4000,
+    "solverStateRevision": 1,
+    "geometryCrc32": 1706894045,
+    "archivedSummary": "docs/sphere3d-rh64/summary.jsonl",
+    "archivedSummarySha256": "8b9f64f323d9b78c6a79bcf53e68f29526b543cb7779fac3156664e81e9cbad0"
+   },
+   "configuration": {
+    "mach": 2,
+    "radiusCells": 64,
+    "upstream": 2,
+    "downstream": 0.5,
+    "lateral": 2,
+    "gridOffset": 0,
+    "cfl": 0.8,
+    "wall": "cutcell",
+    "reconstruction": null,
+    "merge": null,
+    "flux": "rusanov",
+    "Tinf": 220,
+    "pinf": 2500,
+    "startupSteps": 150,
+    "residualDrop": 4,
+    "massBalanceTol": 0.001,
+    "maxSteps": 20000
+   },
+   "convergence": {
+    "rule": "residual in x < 0 down 4 orders from its largest value in the first 5 steps, and |net mass flux| < 0.001 of the intercepted flux ρ∞V∞πR²/4 (sphere3d.ts runSphereCase)",
+    "advancedFromStep": 4000,
+    "convergedAtStep": 4042,
+    "dropFront": 4.000665887108731,
+    "massImbalance": 0.0006816303190460812,
+    "reproducesArchivedRun": [
+     "steps",
+     "dropFront",
+     "massImbalance",
+     "symmetryError",
+     "xNose",
+     "standoff.foot",
+     "standoff.mid",
+     "standoff.tail",
+     "standoff.maxGradient",
+     "standoff.equalArea"
+    ]
+   },
+   "grid": {
+    "nx": 160,
+    "ny": 128,
+    "h": 0.015625,
+    "x0": -2,
+    "cellCentres": "x_i = x0 + (i + ½) h, y_j = (j + ½) h, z = ½ h",
+    "sphere": "centre (0, 0, 0), radius R = 1; flow in +x; quarter domain y ≥ 0, z ≥ 0 with symmetry (slip) planes y = 0 and z = 0",
+    "cells": {
+     "total": 20480,
+     "solid": 5105,
+     "cut": 139,
+     "full": 15236
+    }
+   },
+   "extraction": {
+    "plane": "cell layer k = 0 (centres at z = h/2), the layer next to the z = 0 symmetry plane",
+    "mirrorCheck": "max |field(i, j, k = 0) − field(i, k = 0, j)| against the j = 0 layer (v and w swapped); a subset of the archived symmetry error",
+    "mirrorMaxAbsDifference": {
+     "rho": 6.838063448810772e-11,
+     "u": 2.3461455000983733e-11,
+     "v": 1.525586601491824e-11,
+     "w": 2.2182730099410547e-11,
+     "p": 1.1059131388435617e-10,
+     "alpha": 0
+    },
+    "archivedSymmetryError": 0.00016270974949017481
+   },
+   "detectors": {
+    "xNose": -0.9999389629809912,
+    "foot": 0.3805355416549232,
+    "mid": 0.35679892972031624,
+    "tail": 0.3347084673909575,
+    "maxGradient": 0.35671891822004875,
+    "equalArea": 0.3572318028274373
+   },
+   "f64": {
+    "file": "plane-rh64-off0.f64.bin",
+    "layout": "six Float64 arrays (little-endian) in the order of fields, each nx·ny values, index j·nx + i; solid cells (alpha = 0) hold 0",
+    "fields": [
+     {
+      "name": "rho",
+      "definition": "ρ / ρ∞",
+      "unit": "1"
+     },
+     {
+      "name": "u",
+      "definition": "u / V∞ (x, the freestream direction)",
+      "unit": "1"
+     },
+     {
+      "name": "v",
+      "definition": "v / V∞ (y)",
+      "unit": "1"
+     },
+     {
+      "name": "w",
+      "definition": "w / V∞ (z, normal to the plane; small next to the symmetry plane)",
+      "unit": "1"
+     },
+     {
+      "name": "p",
+      "definition": "p / p∞",
+      "unit": "1"
+     },
+     {
+      "name": "alpha",
+      "definition": "fluid volume fraction of the cell (0 = inside the sphere, 1 = full fluid cell, between: cut cell)",
+      "unit": "1"
+     }
+    ]
+   },
+   "u8": {
+    "file": "plane-rh64-off0.u8.bin",
+    "layout": "six Uint8 arrays in the order of fields, each nx·ny values, index j·nx + i",
+    "fields": [
+     {
+      "name": "rho",
+      "definition": "ρ / ρ∞",
+      "unit": "1",
+      "lo": 0.1830827267331392,
+      "hi": 3.105379924931378,
+      "step": 0.011459989012542112,
+      "maxAbsError": 0.00572962733230864,
+      "bound": 0.005729994506271056
+     },
+     {
+      "name": "p",
+      "definition": "p / p∞",
+      "unit": "1",
+      "lo": 0.1182549371597052,
+      "hi": 5.605894162471911,
+      "step": 0.021520153824753748,
+      "maxAbsError": 0.010759148234543936,
+      "bound": 0.010760076912376874
+     },
+     {
+      "name": "mach",
+      "definition": "|V| / a, a = √(γ p / ρ), from the full-precision state",
+      "unit": "1",
+      "lo": 0.024687700184380504,
+      "hi": 2.9289620115952046,
+      "step": 0.011389311025140488,
+      "maxAbsError": 0.005693973936956809,
+      "bound": 0.005694655512570244
+     },
+     {
+      "name": "u",
+      "definition": "u / V∞",
+      "unit": "1",
+      "lo": 0.01375013427662479,
+      "hi": 1.0985630190955962,
+      "step": 0.004254168175760672,
+      "maxAbsError": 0.0021270063593703536,
+      "bound": 0.002127084087880336
+     },
+     {
+      "name": "v",
+      "definition": "v / V∞",
+      "unit": "1",
+      "lo": -0.519111050814838,
+      "hi": 0.4006626417876613,
+      "step": 0.003606955657264703,
+      "maxAbsError": 0.0018034099923430191,
+      "bound": 0.0018034778286323515
+     },
+     {
+      "name": "alpha",
+      "definition": "fluid volume fraction: code 0 = solid, otherwise max(1, round(255·α))",
+      "unit": "1",
+      "lo": 0,
+      "hi": 1,
+      "step": 0.00392156862745098,
+      "maxAbsError": 0.0018458946078431376,
+      "bound": 0.00392156862745098
+     }
+    ]
+   }
+  }
+ ],
+ "files": [
+  {
+   "name": "plane-rh48-off0.25.f64.bin",
+   "bytes": 552960,
+   "gzipBytes": 246492,
+   "sha256": "12afe26c6054bf834b840f74f8a91ba846e2a2a22ecc41fc36c817ee620c20c6"
+  },
+  {
+   "name": "plane-rh48-off0.5.f64.bin",
+   "bytes": 552960,
+   "gzipBytes": 246057,
+   "sha256": "924fb292efa765a724540edba718e1507efae005ee0cf9962f90b2c9f6f3c035"
+  },
+  {
+   "name": "plane-rh48-off0.5.u8.bin",
+   "bytes": 69120,
+   "gzipBytes": 15282,
+   "sha256": "822028c56c7b3a6db3ec7a05f0c051c0d6e9a31694128bc61db160715a83fd4a"
+  },
+  {
+   "name": "plane-rh48-off0.75.f64.bin",
+   "bytes": 552960,
+   "gzipBytes": 245370,
+   "sha256": "532f52dc261871430e612c4107edcaf5eb2340561827a954442a3e9ee273b21f"
+  },
+  {
+   "name": "plane-rh64-off0.f64.bin",
+   "bytes": 983040,
+   "gzipBytes": 394451,
+   "sha256": "2deb91fba015bc7eae1798d98ab06ec66ca1412695ed6d08913cca5ee57df6f1"
+  },
+  {
+   "name": "plane-rh64-off0.u8.bin",
+   "bytes": 122880,
+   "gzipBytes": 21337,
+   "sha256": "5c331762752170f54271166eff8c08b3b59f6feae0bbb87ca55442e45d66b709"
+  },
+  {
+   "name": "profiles.json",
+   "bytes": 13808,
+   "gzipBytes": 5112,
+   "sha256": "a7da06564e5bb0d40b9b227b791c9838d775975af0ad94141b96c7459b951c7c"
+  },
+  {
+   "name": "results.json",
+   "bytes": 20840,
+   "gzipBytes": 6202,
+   "sha256": "a7d2ffc247c1d8f1a76a55f0c39d61ca9c7e20c354bbdae73f1bddc281a53a6c"
+  }
+ ]
+}
