@@ -1,0 +1,45 @@
+1. Isotropic 3D series (reduced domain 2R / 0.5R / 2R, Rusanov, cut cell, CFL 0.8, 4-order stopping rule)
+   R/h  cells      steps  conv  drop  imbalance  time (s)   offset 0: 50 %   steepest   equal area | 4-offset mean 50 % (range)   equal area (range) | width  sym      body  nose p/pitot p0/pitot T/T0
+     8       5120    564  yes  4.00  6.1e-4         4   0.36491 0.31071 0.37960 | 0.37069 (0.00860)   0.38543 (0.01144) | 2.48  5e-15  0  0.9273 0.9539 1.0141
+    12      17280    798  yes  4.00  7.0e-4        20   0.37317 0.36051 0.38028 | 0.37340 (0.00340)   0.38076 (0.00488) | 2.55  6e-12  0  0.9500 0.9627 1.0121
+    16      40960   1060  yes  4.00  6.4e-4        67   0.36988 0.36389 0.37424 | 0.36929 (0.00180)   0.37436 (0.00167) | 2.71  2e-9  0  0.9654 0.9725 1.0123
+    24     138240   1546  yes  4.00  7.0e-4       345   0.36543 0.36294 0.36764 | 0.36486 (0.00119)   0.36755 (0.00041) | 2.77  7e-9  0  0.9815 0.9847 1.0087
+    32     327680   2045  yes  4.00  6.9e-4      1079   0.36121 0.35839 0.36341 | 0.36184 (0.00116)   0.36360 (0.00037) | 2.90  1e-8  0  0.9876 0.9894 1.0058
+    48    1105920   3040  yes  4.00  6.9e-4      5319   0.35835 0.35770 0.35924 | (1 offset)                | 2.89  1e-6  0  0.9920 0.9928 1.0037
+    64    2621440   4042  yes  4.00  6.8e-4     13508   0.35680 0.35672 0.35723 | (1 offset)                | 2.93  2e-4  0  0.9939 0.9943 1.0029   ← this study
+
+2. Refinement trend (offset-0 values; the R/h ≥ 48 points have one grid position only)
+   mid: 12: 0.37317, 16: 0.36988, 24: 0.36543, 32: 0.36121, 48: 0.35835, 64: 0.35680
+     local slope Δf/Δh: 12→16 0.158, 16→24 0.214, 24→32 0.405, 32→48 0.275, 48→64 0.298
+     Celik triplets (R/h ≥ 16): 16/24/32 p 1.29 f_ext 0.35184 GCI ±0.01171 | 16/24/48 p 0.13 f_ext 0.28378 GCI ±0.09322 | 16/24/64 p 0.32 f_ext 0.33362 GCI ±0.02897 | 16/32/48 p 1.02 f_ext 0.35275 GCI ±0.00701 | 16/32/64 p 0.97 f_ext 0.35221 GCI ±0.00573 | 16/48/64 no solution for p | 24/32/48 p 2.16 f_ext 0.35630 GCI ±0.00256 | 24/32/64 p 1.81 f_ext 0.35504 GCI ±0.00220 | 24/48/64 p 1.25 f_ext 0.35319 GCI ±0.00451 | 32/48/64 p 0.76 f_ext 0.35048 GCI ±0.00789
+     two finest (48, 64) with an assumed order: p = 1 → 0.35214, p = 0.85 → 0.35119, p = 0.64 → 0.34911, p = 2 → 0.35480
+   maxGradient: 12: 0.36051, 16: 0.36389, 24: 0.36294, 32: 0.35839, 48: 0.35770, 64: 0.35672
+     local slope Δf/Δh: 12→16 -0.162, 16→24 0.046, 24→32 0.437, 32→48 0.066, 48→64 0.189
+     Celik triplets (R/h ≥ 16): 16/24/32 p 9.48 f_ext 0.35807 GCI ±0.00040 | 16/24/48 p 1.37 f_ext 0.35439 GCI ±0.00415 | 16/24/64 p 0.77 f_ext 0.35118 GCI ±0.00692 | 16/32/48 p 2.66 f_ext 0.35735 GCI ±0.00044 | 16/32/64 p 1.72 f_ext 0.35600 GCI ±0.00090 | 16/48/64 no solution for p | 24/32/48 p 6.89 f_ext 0.35766 GCI ±0.00006 | 24/32/64 p 4.46 f_ext 0.35664 GCI ±0.00010 | 24/48/64 p 1.54 f_ext 0.35495 GCI ±0.00221 | 32/48/64 p 3.25 f_ext 0.35608 GCI ±0.00079
+     two finest (48, 64) with an assumed order: p = 1 → 0.35377, p = 0.85 → 0.35317, p = 0.64 → 0.35185, p = 2 → 0.35545
+   equalArea: 12: 0.38028, 16: 0.37424, 24: 0.36764, 32: 0.36341, 48: 0.35924, 64: 0.35723
+     local slope Δf/Δh: 12→16 0.290, 16→24 0.317, 24→32 0.406, 32→48 0.401, 48→64 0.385
+     Celik triplets (R/h ≥ 16): 16/24/32 p 0.29 f_ext 0.31500 GCI ±0.06051 | 16/24/48 p 0.54 f_ext 0.34084 GCI ±0.02300 | 16/24/64 p 0.64 f_ext 0.34522 GCI ±0.01501 | 16/32/48 p 0.75 f_ext 0.34743 GCI ±0.01476 | 16/32/64 p 0.81 f_ext 0.34903 GCI ±0.01025 | 16/48/64 no solution for p | 24/32/48 p 1.04 f_ext 0.35128 GCI ±0.00994 | 24/32/64 p 1.06 f_ext 0.35153 GCI ±0.00712 | 24/48/64 p 1.09 f_ext 0.35180 GCI ±0.00679 | 32/48/64 p 1.12 f_ext 0.35194 GCI ±0.00662
+     two finest (48, 64) with an assumed order: p = 1 → 0.35122, p = 0.85 → 0.35000, p = 0.64 → 0.34732, p = 2 → 0.35466
+   Using 4-offset means where available (R/h ≤ 32) and the single values at 48 and 64:
+     mid: 16: 0.36929, 24: 0.36486, 32: 0.36184, 48: 0.35835, 64: 0.35680; local slopes 16→24 0.213, 24→32 0.290, 32→48 0.335, 48→64 0.298
+       16/32/64: p 0.56 f_ext 0.34624 GCI ±0.01319
+       24/32/64: p 0.77 f_ext 0.34963 GCI ±0.00896
+       24/48/64: p 1.09 f_ext 0.35257 GCI ±0.00529
+       32/48/64: p 1.33 f_ext 0.35345 GCI ±0.00419
+     equalArea: 16: 0.37436, 24: 0.36755, 32: 0.36360, 48: 0.35924, 64: 0.35723; local slopes 16→24 0.327, 24→32 0.379, 32→48 0.419, 48→64 0.385
+       16/32/64: p 0.76 f_ext 0.34802 GCI ±0.01151
+       24/32/64: p 0.85 f_ext 0.34926 GCI ±0.00997
+       24/48/64: p 1.07 f_ext 0.35167 GCI ±0.00695
+       32/48/64: p 1.24 f_ext 0.35255 GCI ±0.00585
+
+3. Against the axisymmetric reference (engineering band 0.3485–0.3508 R) and the axisymmetric solver at the same R/h
+   R/h 16: 3D 50 % 0.36988 (above band top by 0.01908), equal area 0.37424 (by 0.02344); axisymmetric R/h 16: 0.36265 / 0.36711 → gap 0.00723 / 0.00714, gap·N 0.116
+   R/h 24: 3D 50 % 0.36543 (above band top by 0.01463), equal area 0.36764 (by 0.01684); axisymmetric R/h 24: 0.35818 / 0.36121 → gap 0.00725 / 0.00643, gap·N 0.174
+   R/h 32: 3D 50 % 0.36121 (above band top by 0.01041), equal area 0.36341 (by 0.01261); axisymmetric R/h 32: 0.35668 / 0.35899 → gap 0.00453 / 0.00442, gap·N 0.145
+   R/h 48: 3D 50 % 0.35835 (above band top by 0.00755), equal area 0.35924 (by 0.00844); axisymmetric R/h 48: 0.35500 / 0.35588 → gap 0.00335 / 0.00335, gap·N 0.161
+   R/h 64: 3D 50 % 0.35680 (above band top by 0.00600), equal area 0.35723 (by 0.00643); axisymmetric R/h 64: 0.35339 / 0.35408 → gap 0.00341 / 0.00315, gap·N 0.218
+
+4. Predictions recorded before the result (docs/sphere3d-rh64/PREDICTION.md) against the measurement
+   mid: measured 0.35680; 3D model, linear 0.35691 (Δ -0.00011), 3D model, p = 0.85 0.35697 (Δ -0.00017), constant last slope 0.35660 (Δ 0.00020), rising slope 0.35640 (Δ 0.00040)
+   equalArea: measured 0.35723; 3D model, linear 0.35736 (Δ -0.00013), 3D model, p = 0.85 0.35732 (Δ -0.00009), constant last slope 0.35706 (Δ 0.00017), rising slope 0.35680 (Δ 0.00043)
