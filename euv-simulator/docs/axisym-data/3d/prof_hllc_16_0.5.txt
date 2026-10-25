@@ -1,0 +1,20 @@
+### hllc R/h=16 offset=0.5 steps=1802 converged=true dropFront=4.00 massImbalance=2.48e-4
+  xNose=-0.99902 rho2/rhoInf=2.66667 h=0.0625
+  crossing phi=0.1: cells (9,10) x=-1.41370 standoff=0.4147
+  crossing phi=0.5: cells (10,11) x=-1.35601 standoff=0.3570
+  crossing phi=0.9: cells (10,11) x=-1.32402 standoff=0.3250
+  maxGradient: face (10,11) rise=1.3022 x=-1.34917 standoff=0.3501
+  reported: standoff=0.3570 foot=0.4147 tail=0.3250 width=1.435 cells (tail-foot crossings: 1.435)
+  profile (i, x_centre, rho/rhoInf, phi, alpha):
+    6 -1.62500 1.00000 0.00000 1.000
+    7 -1.56250 1.00000 0.00000 1.000
+    8 -1.50000 1.00000 0.00000 1.000
+    9 -1.43750 1.00000 0.00000 1.000
+    10 -1.37500 1.43772 0.26263 1.000
+    11 -1.31250 2.73992 1.04395 1.000
+    12 -1.25000 2.81494 1.08896 1.000
+    13 -1.18750 2.90147 1.14088 1.000
+    14 -1.12500 2.97378 1.18427 1.000
+    15 -1.06250 3.06230 1.23738 1.000
+    16 -1.00000 3.04335 1.22601 0.500
+  upstream cells phi range (i < 6): 0.0e+0 .. 0.0e+0

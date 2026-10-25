@@ -1,0 +1,19 @@
+### rusanov R/h=12 offset=0 steps=1083 converged=true dropFront=5.14 massImbalance=9.99e-4
+  xNose=-0.99826 rho2/rhoInf=2.66667 h=0.08333333333333333
+  crossing phi=0.1: cells (5,6) x=-1.49171 standoff=0.4935
+  crossing phi=0.5: cells (7,8) x=-1.37149 standoff=0.3732
+  crossing phi=0.9: cells (8,9) x=-1.27902 standoff=0.2808
+  maxGradient: face (7,8) rise=0.6437 x=-1.35884 standoff=0.3606
+  reported: standoff=0.3732 foot=0.4935 tail=0.2808 width=2.552 cells (tail-foot crossings: 2.552)
+  profile (i, x_centre, rho/rhoInf, phi, alpha):
+    2 -1.79167 1.00066 0.00039 1.000
+    3 -1.70833 1.00306 0.00183 1.000
+    4 -1.62500 1.01386 0.00832 1.000
+    5 -1.54167 1.05998 0.03599 1.000
+    6 -1.45833 1.23796 0.14277 1.000
+    7 -1.37500 1.80621 0.48372 1.000
+    8 -1.29167 2.44987 0.86992 1.000
+    9 -1.20833 2.78007 1.06804 1.000
+    10 -1.12500 2.89061 1.13437 1.000
+    11 -1.04167 2.94147 1.16488 1.000
+  upstream cells phi range (i < 2): 1.3e-5 .. 8.1e-5
