@@ -1,0 +1,66 @@
+1. R/h 48, four grid positions (Rusanov, cut cell, reduced domain 2R / 0.5R / 2R, CFL 0.8, 4-order stopping rule)
+   offset  source                          steps  conv  drop    imbalance  time (s)   50 %      steepest  equal area  width  symmetry  nose p/pitot
+   0       sphere3d-refinement              3040  yes   4.0010  6.95e-4     5319   0.35835   0.35770   0.35924   2.89   9.5e-7   0.99204
+   0.25    sphere3d-rh48-offsets/off0.25    3015  yes   4.0000  7.12e-4     4181   0.35878   0.35838   0.35957   2.86   5.2e-7   0.98653
+   0.5     sphere3d-rh48-offsets/off0.5     3018  yes   4.0003  7.12e-4     4252   0.35880   0.35831   0.35961   2.95   1.1e-6   0.99559
+   0.75    sphere3d-rh48-offsets/off0.75    3020  yes   4.0005  7.06e-4     4250   0.35809   0.35704   0.35915   2.98   3.7e-6   0.99454
+   configuration identical apart from gridOffset: true
+   grid identical: true (120 × 96 × 96); fluid cells 1011346, 1011682, 1011980, 1012334
+   detectors recomputed from the stored profiles (|recomputed − stored|, R):
+     offset 0: 50 % 3.23e-7, steepest rise 1.52e-7, equal area 3.53e-7
+     offset 0.25: 50 % 3.30e-7, steepest rise 1.09e-8, equal area 3.34e-7
+     offset 0.5: 50 % 5.38e-9, steepest rise 1.72e-7, equal area 3.23e-7
+     offset 0.75: 50 % 2.64e-8, steepest rise 1.89e-7, equal area 2.55e-8
+
+2. Grid-position statistics (all four positions at R/h 48; R/h 16–32 from the archive for comparison)
+   50 %          R/h 48: values 0.35835, 0.35878, 0.35880, 0.35809
+                        mean 0.35851  range 7.09e-4  SD 3.45e-4  offset 0 − mean -1.55e-4  deviations -1.55e-4, 2.73e-4, 2.96e-4, -4.13e-4
+                        range in cells 0.0340 h
+                 R/h 16: mean 0.36929  range 1.80e-3 (0.0288 h)  SD 8.21e-4  offset 0 − mean 5.88e-4
+                 R/h 24: mean 0.36486  range 1.19e-3 (0.0286 h)  SD 6.24e-4  offset 0 − mean 5.70e-4
+                 R/h 32: mean 0.36184  range 1.16e-3 (0.0372 h)  SD 4.78e-4  offset 0 − mean -6.27e-4
+   steepest rise R/h 48: values 0.35770, 0.35838, 0.35831, 0.35704
+                        mean 0.35786  range 1.35e-3  SD 6.28e-4  offset 0 − mean -1.55e-4  deviations -1.55e-4, 5.27e-4, 4.51e-4, -8.23e-4
+                        range in cells 0.0648 h
+                 R/h 16: mean 0.36173  range 4.60e-3 (0.0737 h)  SD 2.08e-3  offset 0 − mean 2.16e-3
+                 R/h 24: mean 0.36189  range 2.54e-3 (0.0610 h)  SD 1.23e-3  offset 0 − mean 1.05e-3
+                 R/h 32: mean 0.36010  range 2.91e-3 (0.0930 h)  SD 1.23e-3  offset 0 − mean -1.72e-3
+   equal area    R/h 48: values 0.35924, 0.35957, 0.35961, 0.35915
+                        mean 0.35939  range 4.58e-4  SD 2.32e-4  offset 0 − mean -1.54e-4  deviations -1.54e-4, 1.80e-4, 2.16e-4, -2.42e-4
+                        range in cells 0.0220 h
+                 R/h 16: mean 0.37436  range 1.67e-3 (0.0267 h)  SD 7.12e-4  offset 0 − mean -1.14e-4
+                 R/h 24: mean 0.36755  range 4.06e-4 (0.0098 h)  SD 1.83e-4  offset 0 − mean 9.40e-5
+                 R/h 32: mean 0.36360  range 3.73e-4 (0.0119 h)  SD 1.86e-4  offset 0 − mean -1.86e-4
+
+3. Equal-area extrapolation (R/h 64 has one grid position in every variant)
+   50 %:
+     24/32/48  offset-0 values: p 2.16  f_ext 0.35630  GCI ±0.00256      | 4-offset means where available: p 0.71  f_ext 0.34853  GCI ±0.01247      | mean at 48 only: p 2.32  f_ext 0.35678  GCI ±0.00216
+     24/48/64  offset-0 values: p 1.25  f_ext 0.35319  GCI ±0.00451      | 4-offset means where available: p 0.86  f_ext 0.35071  GCI ±0.00762      | mean at 48 only: p 1.02  f_ext 0.35181  GCI ±0.00623
+     32/48/64  offset-0 values: p 0.76  f_ext 0.35048  GCI ±0.00789      | 4-offset means where available: p 0.93  f_ext 0.35122  GCI ±0.00698      | mean at 48 only: p 0.33  f_ext 0.33990  GCI ±0.02113
+     24/32/64  offset-0 values: p 1.81  f_ext 0.35504  GCI ±0.00220      | 4-offset means where available: p 0.77  f_ext 0.34963  GCI ±0.00896      | mean at 48 only: p 1.81  f_ext 0.35504  GCI ±0.00220
+     16/32/64  offset-0 values: p 0.97  f_ext 0.35221  GCI ±0.00573      | 4-offset means where available: p 0.56  f_ext 0.34624  GCI ±0.01319      | mean at 48 only: p 0.97  f_ext 0.35221  GCI ±0.00573
+   steepest rise:
+     24/32/48  offset-0 values: p 6.89  f_ext 0.35766  GCI ±0.00006      | 4-offset means where available: p 0.33  f_ext 0.34204  GCI ±0.01977      | mean at 48 only: p 7.74  f_ext 0.35783  GCI ±0.00003
+     24/48/64  offset-0 values: p 1.54  f_ext 0.35495  GCI ±0.00221      | 4-offset means where available: p 0.76  f_ext 0.35209  GCI ±0.00578      | mean at 48 only: p 1.21  f_ext 0.35397  GCI ±0.00343
+     32/48/64  offset-0 values: p 3.25  f_ext 0.35608  GCI ±0.00079      | 4-offset means where available: p 0.96  f_ext 0.35314  GCI ±0.00447      | mean at 48 only: p 5.26  f_ext 0.35640  GCI ±0.00040
+     24/32/64  offset-0 values: p 4.46  f_ext 0.35664  GCI ±0.00010      | 4-offset means where available: p 0.50  f_ext 0.34847  GCI ±0.01031      | mean at 48 only: p 4.46  f_ext 0.35664  GCI ±0.00010
+     16/32/64  offset-0 values: p 1.72  f_ext 0.35600  GCI ±0.00090      | 4-offset means where available: p 1.06  f_ext 0.35360  GCI ±0.00390      | mean at 48 only: p 1.72  f_ext 0.35600  GCI ±0.00090
+   equal area:
+     24/32/48  offset-0 values: p 1.04  f_ext 0.35128  GCI ±0.00994      | 4-offset means where available: p 0.82  f_ext 0.34868  GCI ±0.01338      | mean at 48 only: p 1.15  f_ext 0.35263  GCI ±0.00845
+     24/48/64  offset-0 values: p 1.09  f_ext 0.35180  GCI ±0.00679      | 4-offset means where available: p 0.89  f_ext 0.34986  GCI ±0.00921      | mean at 48 only: p 0.91  f_ext 0.35006  GCI ±0.00896
+     32/48/64  offset-0 values: p 1.12  f_ext 0.35194  GCI ±0.00662      | 4-offset means where available: p 0.93  f_ext 0.35018  GCI ±0.00881      | mean at 48 only: p 0.80  f_ext 0.34890  GCI ±0.01042
+     24/32/64  offset-0 values: p 1.06  f_ext 0.35153  GCI ±0.00712      | 4-offset means where available: p 0.85  f_ext 0.34926  GCI ±0.00997      | mean at 48 only: p 1.06  f_ext 0.35153  GCI ±0.00712
+     16/32/64  offset-0 values: p 0.81  f_ext 0.34903  GCI ±0.01025      | 4-offset means where available: p 0.76  f_ext 0.34802  GCI ±0.01151      | mean at 48 only: p 0.81  f_ext 0.34903  GCI ±0.01025
+   R/h 48 value replaced by each individual position (32/48/64 and 24/48/64, equal area; R/h ≤ 32 as 4-offset means):
+     32/48/64: off 0: p 1.24 f_ext 0.35255 | off 0.25: p 0.58 f_ext 0.34427 | off 0.5: p 0.51 f_ext 0.34210 | off 0.75: p 1.42 f_ext 0.35344  → spread 1.13e-2
+     24/48/64: off 0: p 1.07 f_ext 0.35167 | off 0.25: p 0.69 f_ext 0.34666 | off 0.5: p 0.66 f_ext 0.34580 | off 0.75: p 1.18 f_ext 0.35247  → spread 6.67e-3
+
+4. Decision rule (docs/sphere3d-uncertainty-audit/README.md, section 5, fixed before the runs)
+   equal-area 4-offset range 4.581e-4 (limit 4e-4: >), |offset 0 − mean| 1.537e-4 (stop limit 1e-4: >; escalate limit 2e-4: ≤)
+   → ESCALATE: range > 4e-4 or offset 0 more than 2e-4 from the mean → position-dominated; quote with the position term; an R/h 64 position study becomes justified (needs approval)
+
+5. Against the axisymmetric solver at the same R/h (band 0.3485–0.3508 R)
+   R/h 32: 3D offset 0 0.36121 / 0.36341, 4-offset mean 0.36184 / 0.36360; axisymmetric 0.35668 / 0.35899 → gap (offset 0) 0.00453 / 0.00442, gap (mean) 0.00516 / 0.00461
+   R/h 48: 3D offset 0 0.35835 / 0.35924, 4-offset mean 0.35851 / 0.35939; axisymmetric 0.35500 / 0.35588 → gap (offset 0) 0.00335 / 0.00335, gap (mean) 0.00351 / 0.00351
+   R/h 64: 3D offset 0 0.35680 / 0.35723; axisymmetric 0.35339 / 0.35408 → gap (offset 0) 0.00341 / 0.00315
+   new runs found: 3 of 3

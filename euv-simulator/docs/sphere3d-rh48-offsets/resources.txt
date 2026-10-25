@@ -1,0 +1,9 @@
+# Resources of the R/h 48 offset runs (4-core, 15.6 GiB machine; three runs in parallel)
+# Memory: VmHWM (peak resident set) of each solver worker, sampled every 15 s (segment 1) / 30 s (segment 2).
+segment 1 (fresh start → step 200, STOP_AT=200): workers peak 654, 656, 656 MiB; wall 190 s each
+segment 2 (resume step 200 → convergence):       workers peak 938, 940, 942 MiB; wall 66.7–67.9 min
+  (the resume reads and decodes the 49.6 MB checkpoint and writes checkpoints every 500 steps: transient copies)
+total peak of the three workers: ≈ 2.8 GiB of 15.6 GiB available
+step rate, second order, three in parallel: 300 steps (200 → 500) in ≈ 476 s incl. resume ≈ 1.55 s/step
+whole study: 07:54:43 → 09:06:21 UTC ≈ 72 min wall; solver time per run 4 181 / 4 252 / 4 250 s (offset 0.25 / 0.5 / 0.75)
+audit estimate (docs/sphere3d-uncertainty-audit, section 5): ≈ 1.5 h wall, ≈ 0.7–0.8 GB per run
