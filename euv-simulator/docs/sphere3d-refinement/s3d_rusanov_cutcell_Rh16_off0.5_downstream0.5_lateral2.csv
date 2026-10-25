@@ -1,0 +1,21 @@
+# 3D Cartesian Mach 2 sphere (sphere3d.ts runSphereCase), stagnation-line cells j = k = 0 (centres at y = z = h/2), from the inflow to the last fluid cell
+# x = cell-centre x (R); d = xNose - x, distance from the sphere surface on this line (R); rho/rhoInf; phi = (rho-rhoInf)/(rho2-rhoInf), rho2/rhoInf = 8/3; alpha = fluid fraction
+# meta {"name":"s3d_rusanov_cutcell_Rh16_off0.5_downstream0.5_lateral2","options":{"mach":2,"radiusCells":16,"wall":"cutcell","flux":"rusanov","gridOffset":0.5,"maxSteps":20000,"downstream":0.5,"lateral":2},"grid":{"nx":40,"ny":32,"nz":32,"h":0.0625,"cells":40960,"fluidCells":37766},"steps":1042,"converged":true,"dropFront":4.0005794194475355,"massImbalance":0.0006980856795231146,"seconds":66.220828316,"failure":null,"bodyFluxFraction":0,"boundaryFluxFraction":0.0006980856795231146,"symmetryError":8.811613191495038e-10,"upstreamDeviation":0.0008731760970197566,"xNose":-0.9990229601966113,"standoff":{"foot":0.4588896909106269,"mid":0.36807985354347805,"tail":0.2912991306676932,"maxGradient":0.36080670912777324,"equalArea":0.37342511226657715},"shockWidthCells":2.6814489638869414,"nose":{"pRatio":0.98505383168389,"p0Ratio":0.9873218287467386,"mach":0.05732761115228894,"alpha":0.5},"noseP":0.98505383168389,"noseT":1.0131324070637078,"wall":{"units":342,"p0Mean":0.9175646927924573,"p0Min":0.8200866808837902,"p0Max":0.9873218287467386,"T0MaxError":0.026268630253558634},"merge":{"groups":352,"maxSize":3,"unmergedSmall":0},"hllcFallbacks":0,"hllcFallbackFraction":0}
+i,x,d,rho_over_rhoInf,phi,alpha
+0,-2.000000,1.000977,1.000000,0.000000,1.0000
+1,-1.937500,0.938477,1.000001,0.000001,1.0000
+2,-1.875000,0.875977,1.000006,0.000004,1.0000
+3,-1.812500,0.813477,1.000029,0.000017,1.0000
+4,-1.750000,0.750977,1.000134,0.000081,1.0000
+5,-1.687500,0.688477,1.000620,0.000372,1.0000
+6,-1.625000,0.625977,1.002847,0.001708,1.0000
+7,-1.562500,0.563477,1.012837,0.007702,1.0000
+8,-1.500000,0.500977,1.055481,0.033288,1.0000
+9,-1.437500,0.438477,1.220593,0.132356,1.0000
+10,-1.375000,0.375977,1.753401,0.452041,1.0000
+11,-1.312500,0.313477,2.385999,0.831599,1.0000
+12,-1.250000,0.250977,2.707267,1.024360,1.0000
+13,-1.187500,0.188477,2.861195,1.116717,1.0000
+14,-1.125000,0.125977,2.938390,1.163034,1.0000
+15,-1.062500,0.063477,2.998454,1.199072,1.0000
+16,-1.000000,0.000977,3.046732,1.228039,0.5000

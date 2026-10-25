@@ -1,0 +1,16 @@
+# 3D Cartesian Mach 2 sphere (sphere3d.ts runSphereCase), stagnation-line cells j = k = 0 (centres at y = z = h/2), from the inflow to the last fluid cell
+# x = cell-centre x (R); d = xNose - x, distance from the sphere surface on this line (R); rho/rhoInf; phi = (rho-rhoInf)/(rho2-rhoInf), rho2/rhoInf = 8/3; alpha = fluid fraction
+# meta {"name":"s3d_hllc_cutcell_Rh12_off0_downstream0.5_lateral2","options":{"mach":2,"radiusCells":12,"wall":"cutcell","flux":"hllc","gridOffset":0,"maxSteps":20000,"downstream":0.5,"lateral":2},"grid":{"nx":30,"ny":24,"nz":24,"h":0.08333333333333333,"cells":17280,"fluidCells":15954},"steps":953,"converged":true,"dropFront":4.000302430888315,"massImbalance":0.00004641944734023186,"seconds":34.933585472,"failure":null,"bodyFluxFraction":0,"boundaryFluxFraction":0.00004641944734023186,"symmetryError":2.68177230422495e-13,"upstreamDeviation":2.220446049250313e-16,"xNose":-0.9982623792259117,"standoff":{"foot":0.43380823522608314,"mid":0.35596014228368833,"tail":0.3104686785484557,"maxGradient":0.3451528345148279,"equalArea":0.361513168547675},"shockWidthCells":1.4800746801315272,"nose":{"pRatio":0.9433158712313372,"p0Ratio":0.959475770089214,"mach":0.15596316244685465,"alpha":1},"noseP":0.9433158712313372,"noseT":1.005660391395882,"wall":{"units":198,"p0Mean":0.9343601790669775,"p0Min":0.8751611937300608,"p0Max":0.9898358360228665,"T0MaxError":0.014494896821698244},"merge":{"groups":197,"maxSize":3,"unmergedSmall":0},"hllcFallbacks":0,"hllcFallbackFraction":0}
+i,x,d,rho_over_rhoInf,phi,alpha
+0,-1.958333,0.960071,1.000000,0.000000,1.0000
+1,-1.875000,0.876738,1.000000,0.000000,1.0000
+2,-1.791667,0.793404,1.000000,0.000000,1.0000
+3,-1.708333,0.710071,1.000000,0.000000,1.0000
+4,-1.625000,0.626738,1.000000,0.000000,1.0000
+5,-1.541667,0.543404,1.000000,0.000000,1.0000
+6,-1.458333,0.460071,1.000000,0.000000,1.0000
+7,-1.375000,0.376738,1.528844,0.317307,1.0000
+8,-1.291667,0.293404,2.750075,1.050045,1.0000
+9,-1.208333,0.210071,2.836899,1.102139,1.0000
+10,-1.125000,0.126738,2.959501,1.175700,1.0000
+11,-1.041667,0.043404,2.939316,1.163590,1.0000

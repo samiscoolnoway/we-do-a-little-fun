@@ -1,0 +1,13 @@
+# 3D Cartesian Mach 2 sphere (sphere3d.ts runSphereCase), stagnation-line cells j = k = 0 (centres at y = z = h/2), from the inflow to the last fluid cell
+# x = cell-centre x (R); d = xNose - x, distance from the sphere surface on this line (R); rho/rhoInf; phi = (rho-rhoInf)/(rho2-rhoInf), rho2/rhoInf = 8/3; alpha = fluid fraction
+# meta {"name":"s3d_rusanov_cutcell_Rh8_off0.25_downstream0.5_lateral2","options":{"mach":2,"radiusCells":8,"wall":"cutcell","flux":"rusanov","gridOffset":0.25,"maxSteps":20000,"downstream":0.5,"lateral":2},"grid":{"nx":20,"ny":16,"nz":16,"h":0.125,"cells":5120,"fluidCells":4762},"steps":539,"converged":true,"dropFront":4.003196739703919,"massImbalance":0.0007372093587109001,"seconds":4.377393169,"failure":null,"bodyFluxFraction":0,"boundaryFluxFraction":0.0007372093587109001,"symmetryError":4.557260124826712e-15,"upstreamDeviation":0,"xNose":-0.9960860906568267,"standoff":{"foot":0.5592473240716855,"mid":0.37248567064581795,"tail":0.2541548532497129,"maxGradient":0.3278769611728911,"equalArea":0.3910350329602319},"shockWidthCells":2.440739766575781,"nose":{"pRatio":0.8967452510065205,"p0Ratio":0.92733780900635,"mach":0.21943878841618125,"alpha":0.2734375},"noseP":0.8967452510065205,"noseT":1.0063489960195362,"wall":{"units":92,"p0Mean":0.8871475159428619,"p0Min":0.7767080375752672,"p0Max":0.9689402910264184,"T0MaxError":0.0301226634562195},"merge":{"groups":83,"maxSize":3,"unmergedSmall":0},"hllcFallbacks":0,"hllcFallbackFraction":0}
+i,x,d,rho_over_rhoInf,phi,alpha
+0,-1.968750,0.972664,1.000714,0.000428,1.0000
+1,-1.843750,0.847664,1.004286,0.002572,1.0000
+2,-1.718750,0.722664,1.020428,0.012257,1.0000
+3,-1.593750,0.597664,1.088526,0.053116,1.0000
+4,-1.468750,0.472664,1.342780,0.205668,1.0000
+5,-1.343750,0.347664,1.954881,0.572928,1.0000
+6,-1.218750,0.222664,2.683579,1.010148,1.0000
+7,-1.093750,0.097664,2.792293,1.075376,1.0000
+8,-0.968750,-0.027336,2.792293,1.075376,0.2734
