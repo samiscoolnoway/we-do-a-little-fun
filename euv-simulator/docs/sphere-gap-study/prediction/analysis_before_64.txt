@@ -1,0 +1,235 @@
+1. Axisymmetric solver, radial R/h × tangential aspect (aspect = tangential/radial spacing at the wall; at the shock on the axis the ratio is ≈ 1.35 × aspect)
+   35 runs, all converged: true; max |body mass flux| 2.1e-17; reconstruction fallbacks 0; outer-ring deviation ≤ 1.1e-3; outflow normal Mach ≥ 1.36
+   mid:   R/h \ aspect     0.5    0.75       1     1.5       2       3
+                    16 0.35952 0.36117 0.36265 0.36685 0.37171 0.37490
+                    24 0.35630 0.35708 0.35818 0.36192 0.36624 0.37321
+                    32 0.35531 0.35587 0.35668 0.35897 0.36157 0.36815
+                    48 0.35400 0.35443 0.35500 0.35660 0.35837 0.36215
+                    64 0.35233 0.35269 0.35339 0.35503 0.35660 0.35987
+                    96 0.35181    —    0.35237    —    0.35415    —   
+                   128    —       —    0.35156    —    0.35288    —   
+   maxGradient:   R/h \ aspect     0.5    0.75       1     1.5       2       3
+                    16 0.35125 0.35383 0.35569 0.36038 0.36545 0.36843
+                    24 0.35123 0.35186 0.35279 0.35801 0.36357 0.37078
+                    32 0.35335 0.35378 0.35441 0.35622 0.35836 0.36707
+                    48 0.35340 0.35382 0.35437 0.35590 0.35764 0.36118
+                    64 0.35119 0.35150 0.35257 0.35477 0.35647 0.35967
+                    96 0.35179    —    0.35239    —    0.35413    —   
+                   128    —       —    0.35158    —    0.35285    —   
+   equalArea:   R/h \ aspect     0.5    0.75       1     1.5       2       3
+                    16 0.36411 0.36561 0.36711 0.37153 0.37688 0.38093
+                    24 0.35939 0.36014 0.36121 0.36453 0.36857 0.37578
+                    32 0.35747 0.35809 0.35899 0.36131 0.36374 0.36962
+                    48 0.35486 0.35529 0.35588 0.35752 0.35931 0.36322
+                    64 0.35312 0.35348 0.35408 0.35554 0.35709 0.36040
+                    96 0.35201    —    0.35257    —    0.35440    —   
+                   128    —       —    0.35169    —    0.35305    —   
+   Extrapolation along each aspect column (Celik; constant aspect = both spacings refined together):
+     mid         aspect 0.5  16/32/64: p 0.49 f_ext 0.34499 GCI ±0.00917 | 24/32/48: p 0.15 f_ext 0.33345 GCI ±0.02569 | 32/48/64: p 2.65 f_ext 0.35086 GCI ±0.00183 | 48/64/96: p 4.55 f_ext 0.35171 GCI ±0.00012
+     mid         aspect 0.75 16/32/64: p 0.74 f_ext 0.34791 GCI ±0.00598 | 24/32/48: p 0.49 f_ext 0.34794 GCI ±0.00811 | 32/48/64: p 2.41 f_ext 0.35094 GCI ±0.00218
+     mid         aspect 1    16/32/64: p 0.86 f_ext 0.34936 GCI ±0.00504 | 24/32/48: p 0.68 f_ext 0.34969 GCI ±0.00665 | 32/48/64: p 1.35 f_ext 0.35000 GCI ±0.00424 | 32/64/128: p 0.84 f_ext 0.34925 GCI ±0.00289 | 48/64/96: p 2.36 f_ext 0.35173 GCI ±0.00080 | 64/96/128: p 0.49 f_ext 0.34625 GCI ±0.00664
+     mid         aspect 1.5  16/32/64: p 1.00 f_ext 0.35110 GCI ±0.00491 | 24/32/48: p 1.66 f_ext 0.35414 GCI ±0.00308 | 32/48/64: p 0.18 f_ext 0.32554 GCI ±0.03686
+     mid         aspect 2    16/32/64: p 1.03 f_ext 0.35180 GCI ±0.00600 | 24/32/48: p 2.12 f_ext 0.35602 GCI ±0.00294 | 32/48/64: p 0.71 f_ext 0.34878 GCI ±0.00977 | 32/64/128: p 0.42 f_ext 0.34188 GCI ±0.01374 | 48/64/96: p 0.07 f_ext 0.26554 GCI ±0.11077 | 64/96/128: p 0.87 f_ext 0.34841 GCI ±0.00558
+     mid         aspect 3    16/32/64: p 0.30 f_ext 0.32339 GCI ±0.04561 | 24/32/48: p 0.50 f_ext 0.33544 GCI ±0.03339 | 32/48/64: p 1.77 f_ext 0.35645 GCI ±0.00428
+     maxGradient aspect 0.5  16/32/64: oscillatory | 24/32/48: p 12.74 f_ext 0.35340 GCI ±0.00000 | 32/48/64: oscillatory | 48/64/96: oscillatory
+     maxGradient aspect 0.75 16/32/64: p 5.41 f_ext 0.35144 GCI ±0.00007 | 24/32/48: p 13.58 f_ext 0.35382 GCI ±0.00000 | 32/48/64: oscillatory
+     maxGradient aspect 1    16/32/64: p 0.52 f_ext 0.34836 GCI ±0.00526 | 24/32/48: oscillatory | 32/48/64: p 22.39 f_ext 0.35257 GCI ±0.00000 | 32/64/128: p 0.90 f_ext 0.35044 GCI ±0.00143 | 48/64/96: p 8.22 f_ext 0.35238 GCI ±0.00001 | 64/96/128: p 9.13 f_ext 0.35152 GCI ±0.00008
+     maxGradient aspect 1.5  16/32/64: p 1.52 f_ext 0.35400 GCI ±0.00097 | 24/32/48: p 6.31 f_ext 0.35587 GCI ±0.00003 | 32/48/64: p 7.81 f_ext 0.35464 GCI ±0.00017
+     maxGradient aspect 2    16/32/64: p 1.91 f_ext 0.35579 GCI ±0.00086 | 24/32/48: p 7.15 f_ext 0.35760 GCI ±0.00005 | 32/48/64: p 3.79 f_ext 0.35589 GCI ±0.00074 | 32/64/128: p 0.94 f_ext 0.34892 GCI ±0.00491 | 48/64/96: p 0.76 f_ext 0.34765 GCI ±0.00810 | 64/96/128: p 0.73 f_ext 0.34734 GCI ±0.00688
+     maxGradient aspect 3    16/32/64: p 2.44 f_ext 0.35800 GCI ±0.00209 | 24/32/48: p 0.25 f_ext 0.30648 GCI ±0.06838 | 32/48/64: p 2.86 f_ext 0.35849 GCI ±0.00148
+     equalArea   aspect 0.5  16/32/64: p 0.61 f_ext 0.34490 GCI ±0.01028 | 24/32/48: p 0.11 f_ext 0.29516 GCI ±0.07462 | 32/48/64: p 0.18 f_ext 0.32087 GCI ±0.04031 | 48/64/96: p 2.34 f_ext 0.35131 GCI ±0.00087
+     equalArea   aspect 0.75 16/32/64: p 0.71 f_ext 0.34621 GCI ±0.00909 | 24/32/48: p 0.10 f_ext 0.28649 GCI ±0.08601 | 32/48/64: p 0.26 f_ext 0.33030 GCI ±0.02897
+     equalArea   aspect 1    16/32/64: p 0.73 f_ext 0.34658 GCI ±0.00938 | 24/32/48: p 0.03 f_ext 0.07182 GCI ±0.35508 | 32/48/64: p 0.58 f_ext 0.34417 GCI ±0.01239 | 32/64/128: p 1.04 f_ext 0.34941 GCI ±0.00285 | 48/64/96: p 1.52 f_ext 0.35080 GCI ±0.00222 | 64/96/128: p 0.56 f_ext 0.34659 GCI ±0.00637
+     equalArea   aspect 1.5  16/32/64: p 0.82 f_ext 0.34803 GCI ±0.00938 | 24/32/48: p 0.51 f_ext 0.34116 GCI ±0.02044 | 32/48/64: p 0.88 f_ext 0.34870 GCI ±0.00855
+     equalArea   aspect 2    16/32/64: p 0.98 f_ext 0.35026 GCI ±0.00854 | 24/32/48: p 1.25 f_ext 0.35260 GCI ±0.00839 | 32/48/64: p 1.00 f_ext 0.35041 GCI ±0.00835 | 32/64/128: p 0.72 f_ext 0.34682 GCI ±0.00779 | 48/64/96: p 0.44 f_ext 0.34056 GCI ±0.01730 | 64/96/128: p 0.99 f_ext 0.34897 GCI ±0.00511
+     equalArea   aspect 3    16/32/64: p 0.30 f_ext 0.31981 GCI ±0.05073 | 24/32/48: p 0.89 f_ext 0.34852 GCI ±0.01837 | 32/48/64: p 1.35 f_ext 0.35448 GCI ±0.00740
+
+2. 3D Cartesian solver, R/hx (along the flow) × R/hyz (across), mean over grid offsets in x (range in brackets)
+   R/hx R/hyz  offsets          cells   steps conv   50 %               steepest rise      equal area         width (x cells)  max sym   body
+      8     8  0,0.25,0.5,0.75     5120    564 yes  0.37069 (0.0086) 0.33144 (0.0334) 0.38543 (0.0114)  2.43–2.48     2e-14  0
+     12    12  0,0.25,0.5,0.75    17280    800 yes  0.37340 (0.0034) 0.36122 (0.0047) 0.38076 (0.0049)  2.55–2.63     6e-12  0
+     12    16  0,0.25,0.5,0.75    30720    931 yes  0.37672 (0.0023) 0.36552 (0.0025) 0.38389 (0.0036)  2.58–2.64     6e-11  0
+     12    24  0,0.25,0.5,0.75    69120   1193 yes  0.37941 (0.0030) 0.36878 (0.0042) 0.38639 (0.0042)  2.61–2.66     8e-8  0
+     16    12  0,0.25,0.5,0.75    23040    912 yes  0.36698 (0.0029) 0.35915 (0.0059) 0.37214 (0.0017)  2.63–2.70     6e-10  0
+     16    16  0,0.25,0.5,0.75    40960   1060 yes  0.36929 (0.0018) 0.36173 (0.0046) 0.37436 (0.0017)  2.65–2.71     2e-9  0
+     16    24  0,0.25,0.5,0.75    92160   1307 yes  0.37251 (0.0026) 0.36576 (0.0041) 0.37741 (0.0018)  2.69–2.72     4e-8  0
+     16    32  0,0.25,0.5,0.75   163840   1715 yes  0.37379 (0.0034) 0.36738 (0.0046) 0.37862 (0.0024)  2.71–2.72     8e-6  0
+     24    12  0,0.25,0.5,0.75    34560   1138 yes  0.35923 (0.0009) 0.35562 (0.0032) 0.36213 (0.0008)  2.73–2.77     1e-8  0
+     24    16  0,0.25,0.5,0.75    61440   1275 yes  0.36199 (0.0011) 0.35862 (0.0027) 0.36481 (0.0005)  2.75–2.78     5e-9  0
+     24    24  0,0.25,0.5,0.75   138240   1546 yes  0.36486 (0.0012) 0.36189 (0.0025) 0.36755 (0.0004)  2.77–2.83     1e-8  0
+     32    12  0,0.25,0.5,0.75    46080   1379 yes  0.35434 (0.0008) 0.35216 (0.0020) 0.35630 (0.0004)  2.77–2.84     3e-6  0
+     32    16  0,0.25,0.5,0.75    81920   1513 yes  0.35742 (0.0007) 0.35540 (0.0018) 0.35931 (0.0006)  2.79–2.84     9e-8  0
+     32    24  0,0.5             184320   1773 yes  0.36040 (0.0007) 0.35837 (0.0020) 0.36233 (0.0000)  2.80–2.89     1e-8  0
+     32    32  0,0.25,0.5,0.75   327680   2045 yes  0.36184 (0.0012) 0.36010 (0.0029) 0.36360 (0.0004)  2.80–2.90     2e-8  0
+     48    12  0                  69120  20000 NO   0.34956 (0.0000) 0.34846 (0.0000) 0.35064 (0.0000)  2.86–2.86     4e-3  0
+     48    24  0,0.5             276480   2245 yes  0.35551 (0.0006) 0.35440 (0.0016) 0.35655 (0.0003)  2.83–2.96     5e-5  0
+     48    48  0                1105920   3040 yes  0.35835 (0.0000) 0.35770 (0.0000) 0.35924 (0.0000)  2.89–2.89     1e-6  0
+   Effect of refining one direction only (50 % / equal area, offset means):
+     x refined ×2 at R/hyz 12: (12→24) Δ50% -0.01416  ΔEA -0.01862
+     lateral refined ×2 at R/hx 12: (12→24) Δ50% 0.00601  ΔEA 0.00563
+     x refined ×2 at R/hyz 16: (12→24) Δ50% -0.01473  ΔEA -0.01908
+     x refined ×2 at R/hyz 24: (12→24) Δ50% -0.01455  ΔEA -0.01884
+     x refined ×2 at R/hyz 12: (16→32) Δ50% -0.01264  ΔEA -0.01584
+     lateral refined ×2 at R/hx 16: (12→24) Δ50% 0.00553  ΔEA 0.00527
+     x refined ×2 at R/hyz 16: (16→32) Δ50% -0.01187  ΔEA -0.01505
+     lateral refined ×2 at R/hx 16: (16→32) Δ50% 0.00450  ΔEA 0.00426
+     x refined ×2 at R/hyz 24: (16→32) Δ50% -0.01211  ΔEA -0.01509
+     x refined ×2 at R/hyz 32: (16→32) Δ50% -0.01195  ΔEA -0.01502
+     x refined ×2 at R/hyz 12: (24→48) Δ50% -0.00968  ΔEA -0.01149
+     lateral refined ×2 at R/hx 24: (12→24) Δ50% 0.00563  ΔEA 0.00541
+     x refined ×2 at R/hyz 24: (24→48) Δ50% -0.00935  ΔEA -0.01099
+     lateral refined ×2 at R/hx 32: (12→24) Δ50% 0.00606  ΔEA 0.00602
+     lateral refined ×2 at R/hx 32: (16→32) Δ50% 0.00442  ΔEA 0.00429
+     lateral refined ×2 at R/hx 48: (12→24) Δ50% 0.00595  ΔEA 0.00591
+     lateral refined ×2 at R/hx 48: (24→48) Δ50% 0.00284  ΔEA 0.00268
+
+3. Error-model fits (least squares, equal weights; f0 = the fitted grid-converged standoff, ±1σ from the fit residuals).
+   Axisymmetric: h_r = R/N, h_t = aspect·h_r (wall). 3D: hx, hyz. The spread of f0 over model forms and data subsets is a
+   model-form uncertainty, not a statistical one.
+   detector mid:
+     [A: axi R/h ≥ 24; 3D min(R/hx, R/hyz) ≥ 12] linear       f0 + a·h1 + b·h2
+        axisymmetric: f0 0.35050 ±0.00023, a(h_r) 0.038, b(h_t) 0.169, rms 5.1e-4 (n 29)
+        3D          : f0 0.35402 ±0.00048, A(hx) 0.375, B(hyz) -0.131, rms 5.3e-4 (n 16)
+     [A: axi R/h ≥ 24; 3D min(R/hx, R/hyz) ≥ 12] quad-in-h2   f0 + a·h1 + b·h2 + c·h2²
+        axisymmetric: f0 0.35061 ±0.00028, a(h_r) 0.040, b(h_t) 0.160, rms 5.0e-4 (n 29)
+        3D          : f0 0.35306 ±0.00123, A(hx) 0.374, B(hyz) -0.090, rms 5.1e-4 (n 16)
+     [A: axi R/h ≥ 24; 3D min(R/hx, R/hyz) ≥ 12] quadratic    f0 + a·h1 + b·h2 + c·h1² + d·h2²
+        axisymmetric: f0 0.34940 ±0.00050, a(h_r) 0.170, b(h_t) 0.150, rms 4.4e-4 (n 29)
+        3D          : f0 0.35084 ±0.00056, A(hx) 0.518, B(hyz) -0.126, rms 1.9e-4 (n 16)
+     [A: axi R/h ≥ 24; 3D min(R/hx, R/hyz) ≥ 12] p = 0.85     f0 + a·h1^0.85 + b·h2^0.85
+        axisymmetric: f0 0.34942 ±0.00031, a(h_r) 0.021, b(h_t) 0.126, rms 6.0e-4 (n 29)
+        3D          : f0 0.35221 ±0.00038, A(hx) 0.283, B(hyz) -0.102, rms 3.6e-4 (n 16)
+     [B: axi R/h ≥ 32, aspect ≤ 2; 3D min ≥ 16] linear       f0 + a·h1 + b·h2
+        axisymmetric: f0 0.35022 ±0.00023, a(h_r) 0.077, b(h_t) 0.146, rms 3.6e-4 (n 20)
+        3D          : f0 0.35315 ±0.00053, A(hx) 0.396, B(hyz) -0.128, rms 3.7e-4 (n 10)
+     [B: axi R/h ≥ 32, aspect ≤ 2; 3D min ≥ 16] quad-in-h2   f0 + a·h1 + b·h2 + c·h2²
+        axisymmetric: f0 0.34999 ±0.00031, a(h_r) 0.075, b(h_t) 0.169, rms 3.5e-4 (n 20)
+        3D          : f0 0.35192 ±0.00152, A(hx) 0.394, B(hyz) -0.065, rms 3.5e-4 (n 10)
+     [B: axi R/h ≥ 32, aspect ≤ 2; 3D min ≥ 16] quadratic    f0 + a·h1 + b·h2 + c·h1² + d·h2²
+        axisymmetric: f0 0.34899 ±0.00053, a(h_r) 0.207, b(h_t) 0.156, rms 3.0e-4 (n 20)
+        3D          : f0 0.34967 ±0.00035, A(hx) 0.588, B(hyz) -0.123, rms 6.2e-5 (n 10)
+     [B: axi R/h ≥ 32, aspect ≤ 2; 3D min ≥ 16] p = 0.85     f0 + a·h1^0.85 + b·h2^0.85
+        axisymmetric: f0 0.34941 ±0.00024, a(h_r) 0.049, b(h_t) 0.100, rms 3.4e-4 (n 20)
+        3D          : f0 0.35151 ±0.00044, A(hx) 0.290, B(hyz) -0.098, rms 2.7e-4 (n 10)
+     [C: axi R/h ≥ 48, aspect ≤ 2; 3D R/hx ≥ 24, R/hyz ≥ 12] linear       f0 + a·h1 + b·h2
+        axisymmetric: f0 0.34958 ±0.00024, a(h_r) 0.108, b(h_t) 0.158, rms 2.5e-4 (n 15)
+        3D          : f0 0.35191 ±0.00017, A(hx) 0.453, B(hyz) -0.140, rms 9.8e-5 (n 9)
+     [C: axi R/h ≥ 48, aspect ≤ 2; 3D R/hx ≥ 24, R/hyz ≥ 12] quad-in-h2   f0 + a·h1 + b·h2 + c·h2²
+        axisymmetric: f0 0.34963 ±0.00036, a(h_r) 0.108, b(h_t) 0.152, rms 2.5e-4 (n 15)
+        3D          : f0 0.35181 ±0.00032, A(hx) 0.453, B(hyz) -0.134, rms 9.6e-5 (n 9)
+     [C: axi R/h ≥ 48, aspect ≤ 2; 3D R/hx ≥ 24, R/hyz ≥ 12] quadratic    f0 + a·h1 + b·h2 + c·h1² + d·h2²
+        axisymmetric: f0 0.35004 ±0.00091, a(h_r) 0.043, b(h_t) 0.154, rms 2.5e-4 (n 15)
+        3D          : f0 0.35086 ±0.00074, A(hx) 0.522, B(hyz) -0.138, rms 7.9e-5 (n 9)
+     [C: axi R/h ≥ 48, aspect ≤ 2; 3D R/hx ≥ 24, R/hyz ≥ 12] p = 0.85     f0 + a·h1^0.85 + b·h2^0.85
+        axisymmetric: f0 0.34884 ±0.00030, a(h_r) 0.067, b(h_t) 0.104, rms 2.7e-4 (n 15)
+        3D          : f0 0.35057 ±0.00024, A(hx) 0.321, B(hyz) -0.107, rms 1.2e-4 (n 9)
+   detector maxGradient:
+     [A: axi R/h ≥ 24; 3D min(R/hx, R/hyz) ≥ 12] linear       f0 + a·h1 + b·h2
+        axisymmetric: f0 0.35202 ±0.00046, a(h_r) -0.118, b(h_t) 0.188, rms 1.0e-3 (n 29)
+        3D          : f0 0.35788 ±0.00092, A(hx) 0.206, B(hyz) -0.143, rms 1.0e-3 (n 16)
+     [A: axi R/h ≥ 24; 3D min(R/hx, R/hyz) ≥ 12] quad-in-h2   f0 + a·h1 + b·h2 + c·h2²
+        axisymmetric: f0 0.35230 ±0.00055, a(h_r) -0.113, b(h_t) 0.165, rms 9.8e-4 (n 29)
+        3D          : f0 0.35590 ±0.00234, A(hx) 0.203, B(hyz) -0.058, rms 9.7e-4 (n 16)
+     [A: axi R/h ≥ 24; 3D min(R/hx, R/hyz) ≥ 12] quadratic    f0 + a·h1 + b·h2 + c·h1² + d·h2²
+        axisymmetric: f0 0.34944 ±0.00090, a(h_r) 0.196, b(h_t) 0.141, rms 7.8e-4 (n 29)
+        3D          : f0 0.35182 ±0.00124, A(hx) 0.470, B(hyz) -0.124, rms 4.3e-4 (n 16)
+     [A: axi R/h ≥ 24; 3D min(R/hx, R/hyz) ≥ 12] p = 0.85     f0 + a·h1^0.85 + b·h2^0.85
+        axisymmetric: f0 0.35141 ±0.00058, a(h_r) -0.083, b(h_t) 0.140, rms 1.1e-3 (n 29)
+        3D          : f0 0.35745 ±0.00097, A(hx) 0.157, B(hyz) -0.110, rms 9.2e-4 (n 16)
+     [B: axi R/h ≥ 32, aspect ≤ 2; 3D min ≥ 16] linear       f0 + a·h1 + b·h2
+        axisymmetric: f0 0.35135 ±0.00046, a(h_r) -0.019, b(h_t) 0.136, rms 7.3e-4 (n 20)
+        3D          : f0 0.35604 ±0.00109, A(hx) 0.248, B(hyz) -0.137, rms 7.6e-4 (n 10)
+     [B: axi R/h ≥ 32, aspect ≤ 2; 3D min ≥ 16] quad-in-h2   f0 + a·h1 + b·h2 + c·h2²
+        axisymmetric: f0 0.35047 ±0.00057, a(h_r) -0.027, b(h_t) 0.226, rms 6.4e-4 (n 20)
+        3D          : f0 0.35409 ±0.00319, A(hx) 0.246, B(hyz) -0.037, rms 7.4e-4 (n 10)
+     [B: axi R/h ≥ 32, aspect ≤ 2; 3D min ≥ 16] quadratic    f0 + a·h1 + b·h2 + c·h1² + d·h2²
+        axisymmetric: f0 0.34873 ±0.00099, a(h_r) 0.201, b(h_t) 0.204, rms 5.6e-4 (n 20)
+        3D          : f0 0.34949 ±0.00109, A(hx) 0.644, B(hyz) -0.155, rms 2.0e-4 (n 10)
+     [B: axi R/h ≥ 32, aspect ≤ 2; 3D min ≥ 16] p = 0.85     f0 + a·h1^0.85 + b·h2^0.85
+        axisymmetric: f0 0.35086 ±0.00050, a(h_r) -0.014, b(h_t) 0.094, rms 6.9e-4 (n 20)
+        3D          : f0 0.35539 ±0.00115, A(hx) 0.183, B(hyz) -0.103, rms 7.0e-4 (n 10)
+     [C: axi R/h ≥ 48, aspect ≤ 2; 3D R/hx ≥ 24, R/hyz ≥ 12] linear       f0 + a·h1 + b·h2
+        axisymmetric: f0 0.34997 ±0.00049, a(h_r) 0.038, b(h_t) 0.171, rms 5.1e-4 (n 15)
+        3D          : f0 0.35361 ±0.00029, A(hx) 0.349, B(hyz) -0.150, rms 1.7e-4 (n 9)
+     [C: axi R/h ≥ 48, aspect ≤ 2; 3D R/hx ≥ 24, R/hyz ≥ 12] quad-in-h2   f0 + a·h1 + b·h2 + c·h2²
+        axisymmetric: f0 0.34988 ±0.00073, a(h_r) 0.038, b(h_t) 0.183, rms 5.1e-4 (n 15)
+        3D          : f0 0.35368 ±0.00054, A(hx) 0.350, B(hyz) -0.153, rms 1.6e-4 (n 9)
+     [C: axi R/h ≥ 48, aspect ≤ 2; 3D R/hx ≥ 24, R/hyz ≥ 12] quadratic    f0 + a·h1 + b·h2 + c·h1² + d·h2²
+        axisymmetric: f0 0.35161 ±0.00177, a(h_r) -0.234, b(h_t) 0.191, rms 4.8e-4 (n 15)
+        3D          : f0 0.35100 ±0.00053, A(hx) 0.546, B(hyz) -0.165, rms 5.7e-5 (n 9)
+     [C: axi R/h ≥ 48, aspect ≤ 2; 3D R/hx ≥ 24, R/hyz ≥ 12] p = 0.85     f0 + a·h1^0.85 + b·h2^0.85
+        axisymmetric: f0 0.34937 ±0.00057, a(h_r) 0.023, b(h_t) 0.112, rms 5.1e-4 (n 15)
+        3D          : f0 0.35288 ±0.00029, A(hx) 0.248, B(hyz) -0.114, rms 1.4e-4 (n 9)
+   detector equalArea:
+     [A: axi R/h ≥ 24; 3D min(R/hx, R/hyz) ≥ 12] linear       f0 + a·h1 + b·h2
+        axisymmetric: f0 0.34983 ±0.00021, a(h_r) 0.130, b(h_t) 0.163, rms 4.5e-4 (n 29)
+        3D          : f0 0.35261 ±0.00040, A(hx) 0.474, B(hyz) -0.128, rms 4.4e-4 (n 16)
+     [A: axi R/h ≥ 24; 3D min(R/hx, R/hyz) ≥ 12] quad-in-h2   f0 + a·h1 + b·h2 + c·h2²
+        axisymmetric: f0 0.34992 ±0.00025, a(h_r) 0.132, b(h_t) 0.156, rms 4.5e-4 (n 29)
+        3D          : f0 0.35185 ±0.00103, A(hx) 0.473, B(hyz) -0.095, rms 4.3e-4 (n 16)
+     [A: axi R/h ≥ 24; 3D min(R/hx, R/hyz) ≥ 12] quadratic    f0 + a·h1 + b·h2 + c·h1² + d·h2²
+        axisymmetric: f0 0.34879 ±0.00044, a(h_r) 0.253, b(h_t) 0.147, rms 3.8e-4 (n 29)
+        3D          : f0 0.35000 ±0.00048, A(hx) 0.593, B(hyz) -0.125, rms 1.7e-4 (n 16)
+     [A: axi R/h ≥ 24; 3D min(R/hx, R/hyz) ≥ 12] p = 0.85     f0 + a·h1^0.85 + b·h2^0.85
+        axisymmetric: f0 0.34843 ±0.00028, a(h_r) 0.083, b(h_t) 0.122, rms 5.3e-4 (n 29)
+        3D          : f0 0.35001 ±0.00025, A(hx) 0.358, B(hyz) -0.100, rms 2.4e-4 (n 16)
+     [B: axi R/h ≥ 32, aspect ≤ 2; 3D min ≥ 16] linear       f0 + a·h1 + b·h2
+        axisymmetric: f0 0.34943 ±0.00015, a(h_r) 0.170, b(h_t) 0.145, rms 2.3e-4 (n 20)
+        3D          : f0 0.35194 ±0.00040, A(hx) 0.491, B(hyz) -0.126, rms 2.8e-4 (n 10)
+     [B: axi R/h ≥ 32, aspect ≤ 2; 3D min ≥ 16] quad-in-h2   f0 + a·h1 + b·h2 + c·h2²
+        axisymmetric: f0 0.34932 ±0.00021, a(h_r) 0.169, b(h_t) 0.156, rms 2.3e-4 (n 20)
+        3D          : f0 0.35075 ±0.00110, A(hx) 0.490, B(hyz) -0.065, rms 2.5e-4 (n 10)
+     [B: axi R/h ≥ 32, aspect ≤ 2; 3D min ≥ 16] quadratic    f0 + a·h1 + b·h2 + c·h1² + d·h2²
+        axisymmetric: f0 0.34909 ±0.00040, a(h_r) 0.200, b(h_t) 0.153, rms 2.3e-4 (n 20)
+        3D          : f0 0.34915 ±0.00034, A(hx) 0.628, B(hyz) -0.106, rms 6.1e-5 (n 10)
+     [B: axi R/h ≥ 32, aspect ≤ 2; 3D min ≥ 16] p = 0.85     f0 + a·h1^0.85 + b·h2^0.85
+        axisymmetric: f0 0.34834 ±0.00017, a(h_r) 0.109, b(h_t) 0.100, rms 2.4e-4 (n 20)
+        3D          : f0 0.34968 ±0.00028, A(hx) 0.360, B(hyz) -0.097, rms 1.7e-4 (n 10)
+     [C: axi R/h ≥ 48, aspect ≤ 2; 3D R/hx ≥ 24, R/hyz ≥ 12] linear       f0 + a·h1 + b·h2
+        axisymmetric: f0 0.34924 ±0.00019, a(h_r) 0.172, b(h_t) 0.156, rms 1.9e-4 (n 15)
+        3D          : f0 0.35102 ±0.00021, A(hx) 0.536, B(hyz) -0.136, rms 1.2e-4 (n 9)
+     [C: axi R/h ≥ 48, aspect ≤ 2; 3D R/hx ≥ 24, R/hyz ≥ 12] quad-in-h2   f0 + a·h1 + b·h2 + c·h2²
+        axisymmetric: f0 0.34934 ±0.00027, a(h_r) 0.172, b(h_t) 0.143, rms 1.9e-4 (n 15)
+        3D          : f0 0.35082 ±0.00037, A(hx) 0.534, B(hyz) -0.125, rms 1.1e-4 (n 9)
+     [C: axi R/h ≥ 48, aspect ≤ 2; 3D R/hx ≥ 24, R/hyz ≥ 12] quadratic    f0 + a·h1 + b·h2 + c·h1² + d·h2²
+        axisymmetric: f0 0.34951 ±0.00069, a(h_r) 0.145, b(h_t) 0.144, rms 1.9e-4 (n 15)
+        3D          : f0 0.35018 ±0.00100, A(hx) 0.581, B(hyz) -0.128, rms 1.1e-4 (n 9)
+     [C: axi R/h ≥ 48, aspect ≤ 2; 3D R/hx ≥ 24, R/hyz ≥ 12] p = 0.85     f0 + a·h1^0.85 + b·h2^0.85
+        axisymmetric: f0 0.34836 ±0.00024, a(h_r) 0.106, b(h_t) 0.102, rms 2.1e-4 (n 15)
+        3D          : f0 0.34921 ±0.00031, A(hx) 0.378, B(hyz) -0.104, rms 1.5e-4 (n 9)
+   Summary of f0 over all model forms and subsets:
+     mid         axisymmetric f0 0.34884 … 0.35061   3D f0 0.34967 … 0.35402
+     maxGradient axisymmetric f0 0.34873 … 0.35230   3D f0 0.34949 … 0.35788
+     equalArea   axisymmetric f0 0.34834 … 0.34992   3D f0 0.34915 … 0.35261
+
+4. Equivalent axisymmetric aspect: the aspect at which the axisymmetric standoff at the same R/h equals the isotropic 3D
+   offset mean (linear interpolation along the axisymmetric row). Descriptive only.
+   mid         R/h 16: 1.75, R/h 24: 1.84, R/h 32: 2.04, R/h 48: 2.00 (3D: 1 offset)
+   maxGradient R/h 16: 1.63, R/h 24: 1.85, R/h 32: 2.20, R/h 48: 2.02 (3D: 1 offset)
+   equalArea   R/h 16: 1.76, R/h 24: 1.87, R/h 32: 1.97, R/h 48: 1.98 (3D: 1 offset)
+
+5. Off-axis measurement line (3D): the stagnation-line cells lie at r = hyz/√2 from the axis. With the 50 % standoff on
+   the lines j = 0 and j = 1 (r0, r1), d(r) ≈ d0 + c·r² gives the on-axis value d0 = d(r0) − c·r0². Correction d0 − d(r0):
+   R/hx:R/hyz 12:16  -5.2e-4, -4.6e-4, -5.0e-4, -4.3e-4
+   R/hx:R/hyz 12:24  -1.9e-4, -1.8e-4, -2.0e-4, -1.9e-4
+   R/hx:R/hyz 16:12  -9.2e-4, -9.0e-4, -9.3e-4, -9.5e-4
+   R/hx:R/hyz 16:24  -2.0e-4, -1.6e-4, -2.3e-4, -2.1e-4
+   R/hx:R/hyz 16:32  -1.1e-4, -7.8e-5, -1.2e-4, -1.1e-4
+   R/hx:R/hyz 24:12  -9.7e-4, -9.5e-4, -9.9e-4, -9.4e-4
+   R/hx:R/hyz 24:16  -4.6e-4, -5.5e-4, -5.3e-4, -5.2e-4
+   R/hx:R/hyz 32:12  -9.9e-4, -1.0e-3, -9.1e-4, -1.0e-3
+   R/hx:R/hyz 32:16  -5.7e-4, -5.4e-4, -5.4e-4, -4.8e-4
+   R/hx:R/hyz 32:24  -2.3e-4, -2.2e-4
+   R/hx:R/hyz 48:12  -9.0e-4
+   R/hx:R/hyz 48:24  -2.3e-4, -2.3e-4
+
+6. Grid geometry at the same nominal R/h (axisymmetric aspect 1 = the reference grid; 3D isotropic, reduced domain)
+   R/h | axi: radial  tangential wall / shock  ray angle  lateral offset of ray at shock  nose-cell centroid to wall | 3D: hx = hy = hz  line offset hyz/√2  nose-cell centre to wall over the offsets (negative: a merged cut cell whose centre lies inside the body)  nose-cell α
+    16 | h  0.98h / 1.34h  1.759°  0.67h  0.50h | h  0.71h  -0.23h … 0.52h  0.25 … 1.00
+    24 | h  0.99h / 1.35h  1.187°  0.68h  0.50h | h  0.71h  -0.24h … 0.51h  0.25 … 1.00
+    32 | h  1.00h / 1.36h  0.896°  0.68h  0.50h | h  0.71h  -0.24h … 0.51h  0.25 … 1.00
+    48 | h  0.99h / 1.35h  0.594°  0.67h  0.50h | h  0.71h  0.51h … 0.51h  1.00 … 1.00
+   Body-normal and tangential directions: in the axisymmetric grid the radial direction is the body normal at every θ
+   (spacing h) and the tangential spacing is ρΔθ. In the Cartesian grid the cell width along a unit direction n is
+   h(|nx| + |ny| + |nz|): h on the axis (normal = x), √2·h at 45° in a symmetry plane, up to √3·h; the shock and the wall
+   are cut obliquely away from the axis and the wall is one planar facet per cut cell.
