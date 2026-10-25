@@ -1,0 +1,106 @@
+1. Axisymmetric reference columns (aspect = tangential/radial spacing at the wall; ×1.35 at the shock on the axis)
+   aspect R/h   grid        cells   steps   drop  imbalance  time (s)  h_r       h_t wall  h_t shock  50 %     steepest equal area width  nose p0/pitot  wall max|T0 err|  source
+   1        16  64×27         1728   1347  4.13  1.0e-3         2  6.250e-2 6.141e-2 8.368e-2  0.36265 0.35569 0.36711  2.64  0.97675      1.70 %   gap-study matrix
+   1        24  96×40         3840   1958  4.14  1.0e-3         6  4.167e-2 4.145e-2 5.630e-2  0.35818 0.35279 0.36121  2.71  0.98600      1.48 %   gap-study matrix
+   1        32  128×53        6784   2571  4.16  1.0e-3        15  3.125e-2 3.128e-2 4.244e-2  0.35668 0.35441 0.35899  2.82  0.98879      1.38 %   gap-study matrix
+   1        48  192×80       15360   3804  4.14  1.0e-3        54  2.083e-2 2.073e-2 2.808e-2  0.35500 0.35437 0.35588  2.82  0.99256      1.36 %   gap-study matrix
+   1        64  256×106      27136   5034  4.16  1.0e-3        79  1.563e-2 1.564e-2 2.117e-2  0.35339 0.35257 0.35408  2.98  0.99539      1.24 %   gap-study matrix
+   1        96  384×159      61056   7479  4.15  1.0e-3       446  1.042e-2 1.043e-2 1.410e-2  0.35237 0.35239 0.35257  2.96  0.99676      1.10 %   gap-study matrix
+   1       128  512×212     108544   9937  4.14  1.0e-3      1058  7.813e-3 7.821e-3 1.057e-2  0.35156 0.35158 0.35169  2.91  0.99735      0.99 %   gap-study matrix
+   2        16  64×13          832   1129  4.22  1.0e-3         1  6.250e-2 1.275e-1 1.750e-1  0.37171 0.36545 0.37688  2.66  0.97777      1.28 %   gap-study matrix
+   2        24  96×20         1920   1544  4.22  1.0e-3         2  4.167e-2 8.290e-2 1.133e-1  0.36624 0.36357 0.36857  2.75  0.98867      1.37 %   gap-study matrix
+   2        32  128×27        3456   2076  4.19  1.0e-3         6  3.125e-2 6.141e-2 8.361e-2  0.36157 0.35836 0.36374  2.83  0.99325      1.38 %   gap-study matrix
+   2        48  192×40        7680   2993  4.19  1.0e-3        20  2.083e-2 4.145e-2 5.631e-2  0.35837 0.35764 0.35931  2.87  0.99468      1.34 %   gap-study matrix
+   2        64  256×53       13568   3958  4.16  1.0e-3        28  1.563e-2 3.128e-2 4.244e-2  0.35660 0.35647 0.35709  2.91  0.99646      1.20 %   gap-study matrix
+   2        96  384×80       30720   5831  4.19  1.0e-3       169  1.042e-2 2.073e-2 2.807e-2  0.35415 0.35413 0.35440  2.90  0.99734      1.12 %   gap-study matrix
+   2       128  512×106      54272   7739  4.19  1.0e-3       405  7.813e-3 1.564e-2 2.116e-2  0.35288 0.35285 0.35305  2.95  0.99792      0.98 %   gap-study matrix
+   Conservation: body mass flux 2.1e-17 (max over all runs, exactly closed wall faces); net boundary mass flux ≤ the 1e-3 stopping tolerance;
+   energy: the case has no boundary energy-flux bookkeeping, so energy is checked through total-enthalpy preservation (wall max |T0/T0∞ − 1| above, nose T/T0).
+
+2. Refinement along each column
+   aspect 1:
+     mid: 16: 0.36265, 24: 0.35818, 32: 0.35668, 48: 0.35500, 64: 0.35339, 96: 0.35237, 128: 0.35156
+       local slope Δf/Δh: 16→24 0.215, 24→32 0.144, 32→48 0.161, 48→64 0.309, 64→96 0.196, 96→128 0.312
+       Celik triplets (R/h ≥ 48): 48/64/96 p 2.36 f_ext 0.35173 GCI ±0.00080 | 48/64/128 p 1.62 f_ext 0.35067 GCI ±0.00111 | 48/96/128 p 0.60 f_ext 0.34722 GCI ±0.00543 | 64/96/128 p 0.49 f_ext 0.34625 GCI ±0.00664
+       triplets with 0.3 < p < 3: f_ext 0.34625 … 0.35173 (4 of 4)
+       two finest (96, 128) with assumed order: p = 1 → 0.34912, p = 0.85 → 0.34863, p = 2 → 0.35051
+     maxGradient: 16: 0.35569, 24: 0.35279, 32: 0.35441, 48: 0.35437, 64: 0.35257, 96: 0.35239, 128: 0.35158
+       local slope Δf/Δh: 16→24 0.139, 24→32 -0.156, 32→48 0.004, 48→64 0.346, 64→96 0.035, 96→128 0.310
+       Celik triplets (R/h ≥ 48): 48/64/96 p 8.22 f_ext 0.35238 GCI ±0.00001 | 48/64/128 p 3.39 f_ext 0.35148 GCI ±0.00013 | 48/96/128 p 0.03 f_ext 0.27163 GCI ±0.09994 | 64/96/128 p 9.13 f_ext 0.35152 GCI ±0.00008
+       two finest (96, 128) with assumed order: p = 1 → 0.34916, p = 0.85 → 0.34867, p = 2 → 0.35054
+     equalArea: 16: 0.36711, 24: 0.36121, 32: 0.35899, 48: 0.35588, 64: 0.35408, 96: 0.35257, 128: 0.35169
+       local slope Δf/Δh: 16→24 0.283, 24→32 0.214, 32→48 0.298, 48→64 0.346, 64→96 0.290, 96→128 0.339
+       Celik triplets (R/h ≥ 48): 48/64/96 p 1.52 f_ext 0.35080 GCI ±0.00222 | 48/64/128 p 1.27 f_ext 0.34998 GCI ±0.00213 | 48/96/128 p 0.88 f_ext 0.34860 GCI ±0.00385 | 64/96/128 p 0.56 f_ext 0.34659 GCI ±0.00637
+       triplets with 0.3 < p < 3: f_ext 0.34659 … 0.35080 (4 of 4)
+       two finest (96, 128) with assumed order: p = 1 → 0.34904, p = 0.85 → 0.34850, p = 2 → 0.35055
+   aspect 2:
+     mid: 16: 0.37171, 24: 0.36624, 32: 0.36157, 48: 0.35837, 64: 0.35660, 96: 0.35415, 128: 0.35288
+       local slope Δf/Δh: 16→24 0.263, 24→32 0.448, 32→48 0.308, 48→64 0.341, 64→96 0.469, 96→128 0.490
+       Celik triplets (R/h ≥ 48): 48/64/96 p 0.07 f_ext 0.26554 GCI ±0.11077 | 48/64/128 p 0.29 f_ext 0.33591 GCI ±0.02120 | 48/96/128 p 0.63 f_ext 0.34644 GCI ±0.00804 | 64/96/128 p 0.87 f_ext 0.34841 GCI ±0.00558
+       triplets with 0.3 < p < 3: f_ext 0.34644 … 0.34841 (2 of 4)
+       two finest (96, 128) with assumed order: p = 1 → 0.34905, p = 0.85 → 0.34827, p = 2 → 0.35124
+     maxGradient: 16: 0.36545, 24: 0.36357, 32: 0.35836, 48: 0.35764, 64: 0.35647, 96: 0.35413, 128: 0.35285
+       local slope Δf/Δh: 16→24 0.090, 24→32 0.500, 32→48 0.069, 48→64 0.224, 64→96 0.449, 96→128 0.494
+       Celik triplets (R/h ≥ 48): 48/64/96 p 0.76 f_ext 0.34765 GCI ±0.00810 | 48/64/128 p 0.29 f_ext 0.33626 GCI ±0.02073 | 48/96/128 p 0.25 f_ext 0.33542 GCI ±0.02179 | 64/96/128 p 0.73 f_ext 0.34734 GCI ±0.00688
+       triplets with 0.3 < p < 3: f_ext 0.34734 … 0.34765 (2 of 4)
+       two finest (96, 128) with assumed order: p = 1 → 0.34899, p = 0.85 → 0.34820, p = 2 → 0.35119
+     equalArea: 16: 0.37688, 24: 0.36857, 32: 0.36374, 48: 0.35931, 64: 0.35709, 96: 0.35440, 128: 0.35305
+       local slope Δf/Δh: 16→24 0.399, 24→32 0.463, 32→48 0.426, 48→64 0.426, 64→96 0.516, 96→128 0.518
+       Celik triplets (R/h ≥ 48): 48/64/96 p 0.44 f_ext 0.34056 GCI ±0.01730 | 48/64/128 p 0.58 f_ext 0.34496 GCI ±0.01011 | 48/96/128 p 0.82 f_ext 0.34797 GCI ±0.00635 | 64/96/128 p 0.99 f_ext 0.34897 GCI ±0.00511
+       triplets with 0.3 < p < 3: f_ext 0.34056 … 0.34897 (4 of 4)
+       two finest (96, 128) with assumed order: p = 1 → 0.34901, p = 0.85 → 0.34818, p = 2 → 0.35132
+
+3. Grid-phase noise (R/h varied by a few per cent at fixed aspect; the trend over that range is removed with a slope of 0.3 R per unit h,
+   an upper estimate of the local slope, so the residual range is the phase effect plus at most a few 1e-5 of trend error)
+   aspect 1, R/h 32, 33, 34, 35, 36 (referred to 32):
+     mid         0.35668/0.35762/0.35749/0.35679/0.35784 → mean 0.35728, range 0.00116, s.d. 0.00052; base-grid value − mean -0.00060
+     maxGradient 0.35441/0.35624/0.35587/0.35455/0.35678 → mean 0.35557, range 0.00237, s.d. 0.00105; base-grid value − mean -0.00116
+     equalArea   0.35899/0.35907/0.35915/0.35889/0.35910 → mean 0.35904, range 0.00026, s.d. 0.00010; base-grid value − mean -0.00005
+   aspect 1, R/h 64, 65, 66, 67, 68 (referred to 64):
+     mid         0.35339/0.35374/0.35342/0.35374/0.35372 → mean 0.35361, range 0.00035, s.d. 0.00018; base-grid value − mean -0.00021
+     maxGradient 0.35257/0.35351/0.35310/0.35340/0.35349 → mean 0.35321, range 0.00095, s.d. 0.00040; base-grid value − mean -0.00065
+     equalArea   0.35408/0.35428/0.35399/0.35424/0.35424 → mean 0.35417, range 0.00029, s.d. 0.00013; base-grid value − mean -0.00009
+
+4. Extrapolation of the phase-averaged values (where a phase group exists; otherwise the single value), aspect by aspect
+   aspect 1: 32 (phase mean), 64 (phase mean), 128
+     mid         0.35728, 0.35361, 0.35156   32/64/128: p 0.84 f_ext 0.34898
+     maxGradient 0.35557, 0.35321, 0.35158   32/64/128: p 0.53 f_ext 0.34790
+     equalArea   0.35904, 0.35417, 0.35169   32/64/128: p 0.97 f_ext 0.34911
+   aspect 2: 32, 64, 128
+     mid         0.36157, 0.35660, 0.35288   32/64/128: p 0.42 f_ext 0.34188
+     maxGradient 0.35836, 0.35647, 0.35285   32/64/128: p 0.94 f_ext 0.34892
+     equalArea   0.36374, 0.35709, 0.35305   32/64/128: p 0.72 f_ext 0.34682
+
+5. Iteration error (6-order instead of 4-order stopping criterion):
+   R/h 64 aspect 1: steps 5034 → 7846; mid 1.4e-4, maxGradient 2.0e-4, equalArea 1.2e-4
+   R/h 96 aspect 1: steps 7479 → 11961; mid 1.0e-4, maxGradient 1.0e-4, equalArea 1.0e-4
+
+6. Two-dimensional error-model fits f = f0 + terms in h_r and h_t (all standard-criterion runs, phase runs included as individual points)
+   mid:
+     [R/h ≥ 48] linear       f0 + a·h_r + b·h_t          f0 0.34955 ±0.00022  rms 2.3e-4  n 19
+     [R/h ≥ 48] quadratic    + c·h_r² + d·h_t²           f0 0.35015 ±0.00072  rms 2.3e-4  n 19
+     [R/h ≥ 48] p = 0.85     f0 + a·h_r^.85 + b·h_t^.85  f0 0.34880 ±0.00027  rms 2.5e-4  n 19
+     [R/h ≥ 64] linear       f0 + a·h_r + b·h_t          f0 0.34972 ±0.00025  rms 1.8e-4  n 14
+     [R/h ≥ 64] quadratic    + c·h_r² + d·h_t²           f0 0.34774 ±0.00103  rms 1.1e-4  n 14
+     [R/h ≥ 64] p = 0.85     f0 + a·h_r^.85 + b·h_t^.85  f0 0.34914 ±0.00034  rms 2.1e-4  n 14
+     [R/h ≥ 96] linear       f0 + a·h_r + b·h_t          f0 0.34891 ±0.00047  rms 8.6e-5  n 5
+     [R/h ≥ 96] p = 0.85     f0 + a·h_r^.85 + b·h_t^.85  f0 0.34821 ±0.00066  rms 1.0e-4  n 5
+   maxGradient:
+     [R/h ≥ 48] linear       f0 + a·h_r + b·h_t          f0 0.34999 ±0.00043  rms 4.6e-4  n 19
+     [R/h ≥ 48] quadratic    + c·h_r² + d·h_t²           f0 0.35108 ±0.00139  rms 4.4e-4  n 19
+     [R/h ≥ 48] p = 0.85     f0 + a·h_r^.85 + b·h_t^.85  f0 0.34937 ±0.00050  rms 4.6e-4  n 19
+     [R/h ≥ 64] linear       f0 + a·h_r + b·h_t          f0 0.35036 ±0.00054  rms 3.9e-4  n 14
+     [R/h ≥ 64] quadratic    + c·h_r² + d·h_t²           f0 0.34498 ±0.00283  rms 3.0e-4  n 14
+     [R/h ≥ 64] p = 0.85     f0 + a·h_r^.85 + b·h_t^.85  f0 0.34992 ±0.00066  rms 4.1e-4  n 14
+     [R/h ≥ 96] linear       f0 + a·h_r + b·h_t          f0 0.34893 ±0.00038  rms 7.0e-5  n 5
+     [R/h ≥ 96] p = 0.85     f0 + a·h_r^.85 + b·h_t^.85  f0 0.34823 ±0.00056  rms 8.9e-5  n 5
+   equalArea:
+     [R/h ≥ 48] linear       f0 + a·h_r + b·h_t          f0 0.34920 ±0.00018  rms 1.9e-4  n 19
+     [R/h ≥ 48] quadratic    + c·h_r² + d·h_t²           f0 0.34974 ±0.00056  rms 1.8e-4  n 19
+     [R/h ≥ 48] p = 0.85     f0 + a·h_r^.85 + b·h_t^.85  f0 0.34830 ±0.00023  rms 2.2e-4  n 19
+     [R/h ≥ 64] linear       f0 + a·h_r + b·h_t          f0 0.34934 ±0.00020  rms 1.4e-4  n 14
+     [R/h ≥ 64] quadratic    + c·h_r² + d·h_t²           f0 0.34859 ±0.00086  rms 9.0e-5  n 14
+     [R/h ≥ 64] p = 0.85     f0 + a·h_r^.85 + b·h_t^.85  f0 0.34863 ±0.00028  rms 1.8e-4  n 14
+     [R/h ≥ 96] linear       f0 + a·h_r + b·h_t          f0 0.34883 ±0.00051  rms 9.5e-5  n 5
+     [R/h ≥ 96] p = 0.85     f0 + a·h_r^.85 + b·h_t^.85  f0 0.34808 ±0.00071  rms 1.1e-4  n 5
+   f0 spread over model forms and subsets: mid 0.34774 … 0.35015; maxGradient 0.34498 … 0.35108; equalArea 0.34808 … 0.34974
