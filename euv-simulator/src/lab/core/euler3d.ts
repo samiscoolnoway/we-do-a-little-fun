@@ -1,3 +1,4 @@
+import { crc32 } from './crc32';
 import { GAS } from './gas';
 
 /**
@@ -140,6 +141,29 @@ const MERGE_ALPHA = 0.5;
 const DROP_ALPHA = 0.01;
 /** most neighbours kept in a wall-state stencil (tied axes and tied mirror members) */
 const WALL_NB = 6;
+
+/**
+ * Revision of the solver's numerical trajectory, stored in checkpoints (checkpoint3d.ts). Bump it whenever a change
+ * makes the same inputs produce a different sequence of states, so old checkpoints are refused instead of being
+ * continued by different numerics.
+ */
+export const SOLVER3D_STATE_REVISION = 1;
+
+/**
+ * Everything a solver carries from one step to the next (see docs/checkpoint-restart/DESIGN.md): the conservative
+ * variables (padded arrays, ghost entries included) and the counters. All other work arrays are rebuilt within
+ * each step before they are read, and the geometry is rebuilt by the constructor.
+ */
+export interface Solver3DState {
+  revision: number;
+  U: Float64Array[];
+  steps: number;
+  time: number;
+  lastDt: number;
+  order: 1 | 2;
+  hllcFallbacksTotal: number;
+  hllcCalls: number;
+}
 
 export class EulerSolver3D {
   readonly grid: Grid3D;
@@ -1357,5 +1381,70 @@ export class EulerSolver3D {
           for (let v = 0; v < NV; v++) t[v] += this.U[v][c] * w;
         }
     return { mass: t[0], momX: t[1], momY: t[2], momZ: t[3], energy: t[4] };
+  }
+
+  // ───────── checkpoint support ─────────
+  /** a copy of the carried state (exact; see Solver3DState) */
+  exportState(): Solver3DState {
+    if (this.failure) throw new Error('cannot export the state of a failed solver');
+    return {
+      revision: SOLVER3D_STATE_REVISION,
+      U: this.U.map((a) => a.slice()),
+      steps: this.steps,
+      time: this.time,
+      lastDt: this.lastDt,
+      order: this.opts.order,
+      hllcFallbacksTotal: this.hllcFallbacksTotal,
+      hllcCalls: this.hllcCalls,
+    };
+  }
+
+  /**
+   * Continue from an exported state. The solver must have been constructed with the same grid and options; the
+   * caller checks that (checkpoint3d.ts compares the configuration and `geometryFingerprint`). Here: revision,
+   * array count and lengths, finite values, and positive density and pressure at every fluid cell.
+   */
+  importState(s: Solver3DState) {
+    if (s.revision !== SOLVER3D_STATE_REVISION) throw new Error(`state revision ${s.revision} does not match solver revision ${SOLVER3D_STATE_REVISION}`);
+    if (!Array.isArray(s.U) || s.U.length !== NV) throw new Error(`state has ${Array.isArray(s.U) ? s.U.length : 'no'} conservative arrays, expected ${NV}`);
+    const n = this.px * this.py * this.pz;
+    for (let v = 0; v < NV; v++) {
+      if (s.U[v].length !== n) throw new Error(`conservative array ${v} has ${s.U[v].length} entries, expected ${n} (padded grid)`);
+      for (let c = 0; c < n; c++) if (!Number.isFinite(s.U[v][c])) throw new Error(`conservative array ${v} has a non-finite value at padded index ${c}`);
+    }
+    if (!Number.isInteger(s.steps) || s.steps < 0) throw new Error(`invalid step count ${s.steps}`);
+    if (!Number.isFinite(s.time) || !Number.isFinite(s.lastDt)) throw new Error('invalid time or last time step');
+    if (s.order !== 1 && s.order !== 2) throw new Error(`invalid reconstruction order ${s.order}`);
+    if (!Number.isInteger(s.hllcFallbacksTotal) || !Number.isInteger(s.hllcCalls) || s.hllcFallbacksTotal < 0 || s.hllcCalls < 0) throw new Error('invalid HLLC counters');
+    const { nx, ny, nz } = this.grid;
+    const g1 = this.gamma - 1;
+    for (let k = 0; k < nz; k++)
+      for (let j = 0; j < ny; j++)
+        for (let i = 0; i < nx; i++) {
+          if (this.solid[(k * ny + j) * nx + i]) continue;
+          const c = this.P(i, j, k);
+          const rho = s.U[0][c];
+          const ke = (s.U[1][c] ** 2 + s.U[2][c] ** 2 + s.U[3][c] ** 2) / (2 * rho);
+          if (!(rho > 0) || !(g1 * (s.U[4][c] - ke) > 0)) throw new Error(`non-physical state at fluid cell (${i}, ${j}, ${k})`);
+        }
+    for (let v = 0; v < NV; v++) this.U[v].set(s.U[v]);
+    this.steps = s.steps;
+    this.time = s.time;
+    this.lastDt = s.lastDt;
+    this.setOrder(s.order);
+    this.hllcFallbacksTotal = s.hllcFallbacksTotal;
+    this.hllcCalls = s.hllcCalls;
+    this.failure = null;
+  }
+
+  /** CRC-32 of the static geometry (solid mask, cut-cell volume fractions, merge membership) and the fluid-cell
+   *  count: equal for two solvers built from the same configuration by the same code */
+  geometryFingerprint(): { fluidCells: number; crc: number } {
+    const parts: Uint8Array[] = [this.solid];
+    if (this.alpha) parts.push(new Uint8Array(this.alpha.buffer, this.alpha.byteOffset, this.alpha.byteLength));
+    if (this.merged) parts.push(this.merged);
+    let crc = 0;
+    for (const p of parts) crc = crc32(p, crc);
+    return { fluidCells: this.fluidCells, crc };
   }
 }

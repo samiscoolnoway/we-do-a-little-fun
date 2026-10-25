@@ -1,3 +1,4 @@
+import { checkpointMismatches, decodeCheckpoint3D, encodeCheckpoint3D, type SphereRunConfig } from './checkpoint3d';
 import { EulerSolver3D, makeBoxGrid } from './euler3d';
 import { freestream, normalShock, pitotPressure, stagnationTemperature } from './gas';
 
@@ -47,6 +48,22 @@ export interface SphereCaseOptions {
   massBalanceTol?: number;
   Tinf?: number;
   pinf?: number;
+  /** optional checkpoint/restart (docs/checkpoint-restart/DESIGN.md); absent, the run is exactly the plain run */
+  checkpoint?: SphereCheckpointOptions;
+}
+
+export interface SphereCheckpointOptions {
+  /** hand a checkpoint to `write` after every `every`-th completed step (0 or absent: only at `stopAtStep`) */
+  every?: number;
+  /** receives the encoded checkpoint (checkpoint3d.ts) and the step it was taken after */
+  write?: (bytes: Uint8Array, steps: number) => void;
+  /** continue the run stored in these checkpoint bytes; an invalid or incompatible checkpoint throws */
+  resume?: Uint8Array;
+  /** end the run after this step (with a checkpoint) unless it has converged or failed before */
+  stopAtStep?: number;
+  /** checked after every completed step: true ends the run there, with a checkpoint (e.g. a wall-clock budget);
+   *  it only decides where the run is split, never the states computed */
+  stopWhen?: (steps: number) => boolean;
 }
 
 export interface SphereCaseResult {
@@ -119,6 +136,12 @@ export interface SphereCaseResult {
   stagLine: { pRatio: number; p0Ratio: number; mach: number; alpha: number }[];
   /** residual history (front region) for reporting */
   history: number[];
+  /** only with the `checkpoint` option: the step a resumed run continued from (null: fresh run), whether it ended at
+   *  `stopAtStep` before converging, how many checkpoints it wrote, and the segments the final state was computed in */
+  resumedFromStep?: number | null;
+  interrupted?: boolean;
+  checkpointsWritten?: number;
+  lineage?: { fromStep: number; toStep: number }[];
 }
 
 /** Billig's empirical bow-shock standoff for spheres, Δ/R */
@@ -159,9 +182,49 @@ export function runSphereCase(o: SphereCaseOptions): SphereCaseResult {
   let dropFront = 0;
   let dropAll = 0;
   const history: number[] = [];
+  const ck = o.checkpoint;
+  let start = 0;
+  let elapsedBefore = 0;
+  let lineage: { fromStep: number; toStep: number }[] = [];
+  let resumedFromStep: number | null = null;
+  let interrupted = false;
+  let checkpointsWritten = 0;
+  const runConfig: SphereRunConfig = {
+    mach: o.mach,
+    radiusCells: o.radiusCells,
+    upstream: up,
+    downstream: down,
+    lateral: lat,
+    gridOffset: o.gridOffset ?? 0,
+    cfl: o.cfl ?? 0.8,
+    wall: o.wall ?? 'ghost',
+    reconstruction: o.reconstruction ?? null,
+    merge: o.merge ?? null,
+    flux: o.flux ?? 'rusanov',
+    Tinf: o.Tinf ?? 220,
+    pinf: o.pinf ?? 2500,
+    startupSteps: startup,
+    residualDrop: target,
+    massBalanceTol: massTol,
+    maxSteps,
+  };
+  const runSetup = { grid, gamma: s.gamma, timeMode: 'local' as const, bc: s.opts.bc, freestream: fs3 };
+  if (ck?.resume) {
+    const cp = decodeCheckpoint3D(ck.resume);
+    const problems = checkpointMismatches(cp, { config: runConfig, setup: runSetup, geometry: s.geometryFingerprint() });
+    if (problems.length) throw new Error(`checkpoint is incompatible with this run: ${problems.join('; ')}`);
+    if (cp.solver.steps >= maxSteps) throw new Error(`checkpoint is at step ${cp.solver.steps}, not below maxSteps ${maxSteps}`);
+    s.importState(cp.solver);
+    ({ refFront, refAll, dropFront, dropAll, imbalance } = cp.driver);
+    for (const v of cp.driver.history) history.push(v);
+    start = cp.solver.steps;
+    elapsedBefore = cp.driver.elapsedMs;
+    lineage = cp.lineage.map((x) => ({ ...x }));
+    resumedFromStep = start;
+  }
   const t0 = performance.now();
   let converged = false;
-  for (let n = 0; n < maxSteps; n++) {
+  for (let n = start; n < maxSteps; n++) {
     if (n === startup) s.setOrder(2);
     const r = s.step();
     if (!r.ok) break;
@@ -177,8 +240,28 @@ export function runSphereCase(o: SphereCaseOptions): SphereCaseResult {
       converged = true;
       break;
     }
+    if (ck) {
+      const done = n + 1;
+      const stop = ck.stopAtStep === done || (ck.stopWhen?.(done) ?? false);
+      if (ck.write && (stop || (ck.every && done % ck.every === 0))) {
+        const bytes = encodeCheckpoint3D({
+          config: runConfig,
+          setup: runSetup,
+          geometry: s.geometryFingerprint(),
+          solver: s.exportState(),
+          driver: { refFront, refAll, dropFront, dropAll, imbalance, elapsedMs: elapsedBefore + (performance.now() - t0), history: Float64Array.from(history) },
+          lineage: [...lineage, { fromStep: start, toStep: done }],
+        });
+        ck.write(bytes, done);
+        checkpointsWritten++;
+      }
+      if (stop) {
+        interrupted = true;
+        break;
+      }
+    }
   }
-  const ms = performance.now() - t0;
+  const ms = performance.now() - t0 + elapsedBefore;
 
   // stagnation line: the cells j = 0, k = 0 (centres at y = z = h/2, next to the axis)
   let iNose = 0;
@@ -320,5 +403,6 @@ export function runSphereCase(o: SphereCaseOptions): SphereCaseResult {
     merge: mi && { groups: mi.groups, maxSize: mi.maxSize, unmergedSmall: mi.unmergedSmall },
     stagLine,
     history,
+    ...(ck ? { resumedFromStep, interrupted, checkpointsWritten, lineage: [...lineage, { fromStep: start, toStep: s.steps }] } : {}),
   };
 }
