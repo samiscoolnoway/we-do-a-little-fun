@@ -26,6 +26,8 @@ export interface SphereCaseOptions {
   reconstruction?: 'ghost' | 'firstorder';
   /** cut cells only: merge small cut cells (default true) */
   merge?: boolean;
+  /** numerical flux (default 'rusanov'; 'hllc' is experimental, see Solver3DOptions.flux) */
+  flux?: 'rusanov' | 'hllc';
   /** sphere radius in cells (the grid is uniform: h = R / radiusCells) */
   radiusCells: number;
   /** domain extents in sphere radii: upstream of the centre, downstream of it, and laterally (y and z) */
@@ -66,6 +68,31 @@ export interface SphereCaseResult {
   /** bow-shock standoff Δ/R from the computed density on the stagnation line, and the Billig correlation */
   standoff: number;
   billig: number;
+  /** standoff with the shock placed where the density on the stagnation line first passes 10 % (shock foot) and
+   *  90 % (shock tail) of the jump to the normal-shock value; `standoff` itself uses 50 % */
+  standoffFoot: number;
+  standoffTail: number;
+  /**
+   * Shock-detector diagnostics on the stagnation line (cells j = k = 0, centres at y = z = h/2; the flow runs in
+   * +x). `profile`: every cell from the inflow to the last fluid cell before the body, with the x of its centre,
+   * ρ/ρ∞, the normalized jump φ = (ρ − ρ∞)/(ρ₂ − ρ∞) (ρ₂ = ρ∞ times the normal-shock density ratio) and its fluid
+   * fraction. `crossings`: for φ = 0.1, 0.5, 0.9, the first upstream-to-downstream pair of centres (i − 1, i) with
+   * φ(i − 1) < level ≤ φ(i), and x = x(i − 1) + h (level − φ(i − 1)) / (φ(i) − φ(i − 1)). `maxGradient`: an
+   * independent detector, the face between full cells (α = 1) with the largest centre-to-centre density rise,
+   * moved by a parabolic fit through that rise and its two neighbours (at most half a cell). `xNose`: the sphere
+   * surface on the same line, x = −√(R² − h²/2); every standoff is (xNose − x_shock)/R.
+   */
+  shock: {
+    xNose: number;
+    rho2OverRhoInf: number;
+    profile: { x: number; rho: number; phi: number; alpha: number }[];
+    crossings: { level: number; i: number; x: number; standoff: number }[];
+    maxGradient: { i: number; x: number; standoff: number; rise: number };
+  };
+  /** HLLC faces that fell back to the Rusanov flux over the whole run, and their fraction of all HLLC evaluations
+   *  (0 with the Rusanov flux) */
+  hllcFallbacks: number;
+  hllcFallbackFraction: number;
   /** width of the captured bow shock on the stagnation line (10 % → 90 % of the density rise), in cells */
   shockWidthCells: number;
   /** largest relative deviation from the freestream in cells more than 5 h upstream of the shock, and where */
@@ -118,6 +145,7 @@ export function runSphereCase(o: SphereCaseOptions): SphereCaseResult {
     sphere: { cx: 0, cy: 0, cz: 0, r: R, wall: o.wall ?? 'ghost', reconstruction: o.reconstruction, merge: o.merge },
     bc: { xmin: 'inflow', xmax: 'extrapolate', ymin: 'wall', ymax: 'extrapolate', zmin: 'wall', zmax: 'extrapolate' },
     residualRegion: (x) => x < 0,
+    flux: o.flux,
   });
   s.init(() => fs3);
   const startup = o.startupSteps ?? 150;
@@ -188,9 +216,38 @@ export function runSphereCase(o: SphereCaseOptions): SphereCaseResult {
     }
     return NaN;
   };
-  const shockWidthCells = crossing(fs.rho + 0.9 * (rho2 - fs.rho)) - crossing(fs.rho + 0.1 * (rho2 - fs.rho));
+  const iFoot = crossing(fs.rho + 0.1 * (rho2 - fs.rho));
+  const iTail = crossing(fs.rho + 0.9 * (rho2 - fs.rho));
+  const shockWidthCells = iTail - iFoot;
+  // cell-index positions → x of the cell centres (crossing() interpolates between centres i − 1 and i)
+  const xAt = (fi: number) => s.centre(0, 0, 0)[0] + fi * h;
   const yNose = 0.5 * h;
   const xNose = -Math.sqrt(R * R - 2 * yNose * yNose); // the surface at y = z = h/2
+  const profile = Array.from({ length: iNose + 1 }, (_, i) => {
+    const r = s.cell(i, 0, 0).rho;
+    return { x: s.centre(i, 0, 0)[0], rho: r / fs.rho, phi: (r - fs.rho) / (rho2 - fs.rho), alpha: s.fluidFraction(i, 0, 0) };
+  });
+  const crossings = [0.1, 0.5, 0.9].map((level) => {
+    for (let i = 1; i < profile.length; i++) {
+      const a = profile[i - 1].phi;
+      const b = profile[i].phi;
+      if (a < level && b >= level) {
+        const x = profile[i - 1].x + (h * (level - a)) / (b - a);
+        return { level, i, x, standoff: (xNose - x) / R };
+      }
+    }
+    return { level, i: -1, x: NaN, standoff: NaN };
+  });
+  let kMax = -1;
+  const rise = (i: number) => (i >= 1 && i < profile.length && profile[i].alpha === 1 && profile[i - 1].alpha === 1 ? profile[i].rho - profile[i - 1].rho : -Infinity);
+  for (let i = 1; i < profile.length; i++) if (rise(i) > -Infinity && (kMax < 0 || rise(i) > rise(kMax))) kMax = i;
+  let xGrad = NaN;
+  if (kMax > 0) {
+    const [dm, d0, dp] = [rise(kMax - 1), rise(kMax), rise(kMax + 1)];
+    let off = 0;
+    if (Number.isFinite(dm) && Number.isFinite(dp) && dm - 2 * d0 + dp < 0) off = Math.max(-0.5, Math.min(0.5, (0.5 * (dm - dp)) / (dm - 2 * d0 + dp)));
+    xGrad = 0.5 * (profile[kMax - 1].x + profile[kMax].x) + off * h;
+  }
   let upstreamDeviation = 0;
   let upstreamDeviationAt: [number, number, number] = [0, 0, 0];
   for (let k = 0; k < nyz; k++)
@@ -240,6 +297,17 @@ export function runSphereCase(o: SphereCaseOptions): SphereCaseResult {
     TStag: stag.T,
     T0,
     standoff: (xNose - xShock) / R,
+    standoffFoot: (xNose - xAt(iFoot)) / R,
+    standoffTail: (xNose - xAt(iTail)) / R,
+    shock: {
+      xNose,
+      rho2OverRhoInf: rho2 / fs.rho,
+      profile,
+      crossings,
+      maxGradient: { i: kMax, x: xGrad, standoff: (xNose - xGrad) / R, rise: kMax > 0 ? rise(kMax) : NaN },
+    },
+    hllcFallbacks: s.hllcFallbacksTotal,
+    hllcFallbackFraction: s.hllcCalls ? s.hllcFallbacksTotal / s.hllcCalls : 0,
     billig: billigSphere(o.mach),
     shockWidthCells,
     upstreamDeviation,

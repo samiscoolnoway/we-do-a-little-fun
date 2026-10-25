@@ -108,6 +108,9 @@ export interface Solver3DOptions {
   sphere?: ImmersedSphere;
   /** optional sub-region for a second residual (e.g. the flow ahead of a body), evaluated at cell centres */
   residualRegion?: (x: number, y: number, z: number) => boolean;
+  /** numerical flux: 'rusanov' (default) or 'hllc' (EXPERIMENTAL; falls back to Rusanov on the same face states
+   *  whenever its intermediate states are inadmissible, counted in hllcFallbacks) */
+  flux?: 'rusanov' | 'hllc';
 }
 
 export interface Failure3D {
@@ -158,11 +161,87 @@ export class EulerSolver3D {
   private p: Float64Array;
   private res: Float64Array[];
   private f = new Float64Array(NV);
+
+  /**
+   * HLLC flux (Toro, Spruce & Speares 1994; star states as in Batten et al. 1997) × area into this.f, with the
+   * Einfeldt wave-speed estimates S_L = min(u_L − a_L, ũ − ã), S_R = max(u_R + a_R, ũ + ã) (Roe averages). Returns
+   * false (this.f then holds garbage and is overwritten by the caller) when the result would not be admissible: Roe-averaged sound speed² ≤ 0, a
+   * vanishing mass-flux denominator (near vacuum), S* outside (S_L, S_R), a star density or star pressure ≤ 0, or
+   * a non-finite value. The caller then uses the Rusanov flux of the same states.
+   */
+  private hllc(axis: number, rL: number, uL: number, vL: number, wL: number, pL: number, EL: number, rR: number, uR: number, vR: number, wR: number, pR: number, ER: number, area: number): boolean {
+    const g = this.gamma;
+    const unL = axis === 0 ? uL : axis === 1 ? vL : wL;
+    const unR = axis === 0 ? uR : axis === 1 ? vR : wR;
+    const aL = Math.sqrt((g * pL) / rL);
+    const aR = Math.sqrt((g * pR) / rR);
+    const sl = Math.sqrt(rL);
+    const sr = Math.sqrt(rR);
+    const wl = sl / (sl + sr);
+    const wr = 1 - wl;
+    const ut = wl * uL + wr * uR;
+    const vt = wl * vL + wr * vR;
+    const wt = wl * wL + wr * wR;
+    const Ht = (wl * (EL + pL)) / rL + (wr * (ER + pR)) / rR;
+    const a2 = (g - 1) * (Ht - 0.5 * (ut * ut + vt * vt + wt * wt));
+    if (!(a2 > 0)) return false;
+    const at = Math.sqrt(a2);
+    const unt = axis === 0 ? ut : axis === 1 ? vt : wt;
+    const SL = Math.min(unL - aL, unt - at);
+    const SR = Math.max(unR + aR, unt + at);
+    const mL = rL * (SL - unL); // < 0
+    const mR = rR * (SR - unR); // > 0
+    const den = mL - mR;
+    if (!(den < -1e-12 * (Math.abs(mL) + Math.abs(mR)))) return false;
+    const Ss = (pR - pL + mL * unL - mR * unR) / den;
+    if (!(Ss > SL && Ss < SR)) return false;
+    const pStar = pL + mL * (Ss - unL);
+    if (!(pStar > 0)) return false;
+    const f = this.f;
+    // the side whose fan contains x/t = 0: its physical flux, plus S_K (U*_K − U_K) inside the star region
+    const left = Ss >= 0;
+    const r = left ? rL : rR;
+    const u = left ? uL : uR;
+    const v = left ? vL : vR;
+    const w = left ? wL : wR;
+    const p = left ? pL : pR;
+    const E = left ? EL : ER;
+    const un = left ? unL : unR;
+    const S = left ? SL : SR;
+    const m = left ? mL : mR;
+    f[0] = r * un;
+    f[1] = r * u * un + (axis === 0 ? p : 0);
+    f[2] = r * v * un + (axis === 1 ? p : 0);
+    f[3] = r * w * un + (axis === 2 ? p : 0);
+    f[4] = (E + p) * un;
+    if ((left && SL < 0) || (!left && SR > 0)) {
+      const rs = m / (S - Ss);
+      if (!(rs > 0)) return false;
+      const Es = rs * (E / r + (Ss - un) * (Ss + p / m));
+      const mom = [rs * u, rs * v, rs * w];
+      mom[axis] = rs * Ss;
+      f[0] += S * (rs - r);
+      f[1] += S * (mom[0] - r * u);
+      f[2] += S * (mom[1] - r * v);
+      f[3] += S * (mom[2] - r * w);
+      f[4] += S * (Es - E);
+    }
+    for (let q = 0; q < NV; q++) {
+      f[q] *= area;
+      if (!Number.isFinite(f[q])) return false;
+    }
+    return true;
+  }
   time = 0;
   steps = 0;
   lastDt = 0;
   /** faces that fell back to first order during the last step */
   fallbacks = 0;
+  /** HLLC faces that fell back to the Rusanov flux during the last step, and in total since construction, and the
+   *  total number of HLLC flux evaluations */
+  hllcFallbacks = 0;
+  hllcFallbacksTotal = 0;
+  hllcCalls = 0;
   failure: Failure3D | null = null;
   /** 1 for cells inside the immersed body (interior index (k·ny + j)·nx + i) */
   readonly solid: Uint8Array;
@@ -965,6 +1044,12 @@ export class EulerSolver3D {
     const unR = axis === 0 ? uR : axis === 1 ? vR : wR;
     const EL = pL / (g - 1) + 0.5 * rL * (uL * uL + vL * vL + wL * wL);
     const ER = pR / (g - 1) + 0.5 * rR * (uR * uR + vR * vR + wR * wR);
+    if (this.opts.flux === 'hllc') {
+      this.hllcCalls++;
+      if (this.hllc(axis, rL, uL, vL, wL, pL, EL, rR, uR, vR, wR, pR, ER, area)) return;
+      this.hllcFallbacks++;
+      this.hllcFallbacksTotal++;
+    }
     const lam = Math.max(Math.abs(unL) + Math.sqrt((g * pL) / rL), Math.abs(unR) + Math.sqrt((g * pR) / rR));
     const f = this.f;
     f[0] = 0.5 * (rL * unL + rR * unR - lam * (rR - rL)) * area;
@@ -1181,6 +1266,7 @@ export class EulerSolver3D {
     const { nx, ny, nz, dx, dy, dz } = this.grid;
     this.copyState(this.U, this.Ubackup);
     this.fallbacks = 0;
+    this.hllcFallbacks = 0;
     if (!this.toPrimitive(0)) return this.abort();
     this.fillGhosts();
     const dt = Math.min(this.computeDt(), maxDt);
